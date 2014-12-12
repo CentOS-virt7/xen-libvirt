@@ -192,9 +192,12 @@
     %define with_phyp 0
     %define with_vmware 0
     %define with_xenapi 0
-    %define with_libxl 0
     %define with_hyperv 0
     %define with_parallels 0
+%endif
+
+%if 0%{?rhel} <= 5
+    %define with_libxl 0
 %endif
 
 # Fedora 17 / RHEL-7 are first where we use systemd. Although earlier
@@ -213,11 +216,6 @@
 # RHEL-5 is too old for LXC
 %if 0%{?rhel} == 5
     %define with_lxc 0
-%endif
-
-# RHEL-6 stopped including Xen on all archs.
-%if 0%{?rhel} >= 6
-    %define with_xen 0
 %endif
 
 # Fedora doesn't have new enough Xen for libxl until F18
