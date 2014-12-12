@@ -1,0 +1,99 @@
+From: Prerna Saxena <prerna@linux.vnet.ibm.com>
+Date: Tue, 4 Nov 2014 22:52:44 +0530
+Subject: [PATCH] PowerPC : Add support for launching VM in 'compat' mode.
+
+PowerISA allows processors to run VMs in binary compatibility ("compat")
+mode supporting an older version of ISA. QEMU has recently added support to
+explicitly denote a VM running in compatibility mode through commit 6d9412ea
+& 8dfa3a5e85. Now, a "compat" mode VM can be run by invoking this qemu
+commandline on a POWER8 host:  -cpu host,compat=power7.
+
+This patch allows libvirt to exploit cpu mode 'host-model' to describe this
+new mode for PowerKVM guests. For example, when a user wants to request a
+power7 vm to run in compatibility mode on a Power8 host, this can be
+described in XML as follows :
+
+  <cpu mode='host-model'>
+    <model>power7</model>
+  </cpu>
+
+Signed-off-by: Prerna Saxena <prerna@linux.vnet.ibm.com>
+Signed-off-by: Li Zhang <zhlcindy@linux.vnet.ibm.com>
+Signed-off-by: Pradipta Kr. Banerjee <bpradip@in.ibm.com>
+Acked-by: Michal Privoznik <mprivozn@redhat.com>
+(cherry picked from commit addce06c9221f948072cd222b56ea9c3f70ec066)
+---
+ src/conf/cpu_conf.c     |  1 +
+ src/cpu/cpu_powerpc.c   | 11 ++---------
+ src/qemu/qemu_command.c | 10 +++++++++-
+ 3 files changed, 12 insertions(+), 10 deletions(-)
+
+diff --git a/src/conf/cpu_conf.c b/src/conf/cpu_conf.c
+index 9b7fbb0..0e7a979 100644
+--- a/src/conf/cpu_conf.c
++++ b/src/conf/cpu_conf.c
+@@ -619,6 +619,7 @@ virCPUDefFormatBuf(virBufferPtr buf,
+         return 0;
+ 
+     formatModel = (def->mode == VIR_CPU_MODE_CUSTOM ||
++                   def->mode == VIR_CPU_MODE_HOST_MODEL ||
+                    (flags & VIR_DOMAIN_XML_UPDATE_CPU));
+     formatFallback = (def->type == VIR_CPU_TYPE_GUEST &&
+                       (def->mode == VIR_CPU_MODE_HOST_MODEL ||
+diff --git a/src/cpu/cpu_powerpc.c b/src/cpu/cpu_powerpc.c
+index d591c18..4ea1835 100644
+--- a/src/cpu/cpu_powerpc.c
++++ b/src/cpu/cpu_powerpc.c
+@@ -562,8 +562,8 @@ ppcUpdate(virCPUDefPtr guest,
+ static virCPUDefPtr
+ ppcBaseline(virCPUDefPtr *cpus,
+             unsigned int ncpus,
+-            const char **models,
+-            unsigned int nmodels,
++            const char **models ATTRIBUTE_UNUSED,
++            unsigned int nmodels ATTRIBUTE_UNUSED,
+             unsigned int flags)
+ {
+     struct ppc_map *map = NULL;
+@@ -583,13 +583,6 @@ ppcBaseline(virCPUDefPtr *cpus,
+         goto error;
+     }
+ 
+-    if (!cpuModelIsAllowed(model->name, models, nmodels)) {
+-        virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
+-                        _("CPU model %s is not supported by hypervisor"),
+-                        model->name);
+-        goto error;
+-    }
+-
+     for (i = 0; i < ncpus; i++) {
+         const struct ppc_vendor *vnd;
+ 
+diff --git a/src/qemu/qemu_command.c b/src/qemu/qemu_command.c
+index d60f274..34f6535 100644
+--- a/src/qemu/qemu_command.c
++++ b/src/qemu/qemu_command.c
+@@ -6221,7 +6221,9 @@ qemuBuildCpuModelArgStr(virQEMUDriverPtr driver,
+         *hasHwVirt = hasSVM > 0 ? true : false;
+     }
+ 
+-    if (cpu->mode == VIR_CPU_MODE_HOST_PASSTHROUGH) {
++    if ((cpu->mode == VIR_CPU_MODE_HOST_PASSTHROUGH) ||
++        ((cpu->mode == VIR_CPU_MODE_HOST_MODEL) &&
++          ARCH_IS_PPC64(def->os.arch))) {
+         const char *mode = virCPUModeTypeToString(cpu->mode);
+         if (!virQEMUCapsGet(qemuCaps, QEMU_CAPS_CPU_HOST)) {
+             virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
+@@ -6236,6 +6238,12 @@ qemuBuildCpuModelArgStr(virQEMUDriverPtr driver,
+             goto cleanup;
+         }
+         virBufferAddLit(buf, "host");
++
++        if (ARCH_IS_PPC64(def->os.arch) &&
++            cpu->mode == VIR_CPU_MODE_HOST_MODEL) {
++            virBufferAsprintf(buf, ",compat=%s", def->cpu->model);
++        }
++
+     } else {
+         if (VIR_ALLOC(guest) < 0)
+             goto cleanup;

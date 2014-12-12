@@ -1,0 +1,41 @@
+From: Prerna Saxena <prerna@linux.vnet.ibm.com>
+Date: Tue, 4 Nov 2014 23:00:36 +0530
+Subject: [PATCH] docs: Add documentation for compat mode.
+
+Add documentation to explain how compat-mode can be invoked with libvirt
+running on PowerPC architecture.
+It also mentions that this change is available libvirt 1.2.11 onwards.
+
+Signed-off-by: Prerna Saxena <prerna@linux.vnet.ibm.com>
+Reviewed-by: Michal Privoznik <mprivozn@redhat.com>
+(cherry picked from commit 9265fd19b68d787e478f5e490524da794965a5f1)
+---
+ docs/formatdomain.html.in | 15 ++++++++++++++-
+ 1 file changed, 14 insertions(+), 1 deletion(-)
+
+diff --git a/docs/formatdomain.html.in b/docs/formatdomain.html.in
+index 0099ce7..bdaf808 100644
+--- a/docs/formatdomain.html.in
++++ b/docs/formatdomain.html.in
+@@ -1047,7 +1047,20 @@
+           (such as CPUID level) that don't work. Until these issues are fixed,
+           it's a good idea to avoid using <code>host-model</code> and use
+           <code>custom</code> mode with just the CPU model from host
+-          capabilities XML.</dd>
++          capabilities XML.
++          <span class="since">(Since 1.2.11)</span>. PowerISA allows
++          processors to run VMs in binary compatibility mode supporting an
++          older version of ISA.  Libvirt on PowerPC architecture uses the
++          <code>host-model</code> to signify a guest mode CPU running in
++          binary compatibility mode. Example:
++          When a user needs a power7 VM to run in compatibility mode
++          on a Power8 host, this can be described in XML as follows :
++<pre>
++  &lt;cpu mode='host-model'&gt;
++    &lt;model&gt;power7&lt;/model&gt;
++  &lt;/cpu&gt;
++  ...</pre>
++          </dd>
+           <dt><code>host-passthrough</code></dt>
+           <dd>With this mode, the CPU visible to the guest should be exactly
+           the same as the host CPU even in the aspects that libvirt does not

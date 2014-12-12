@@ -1,0 +1,92 @@
+From: Prerna Saxena <prerna@linux.vnet.ibm.com>
+Date: Tue, 4 Nov 2014 22:58:33 +0530
+Subject: [PATCH] PowerPC:Improve PVR handling to fall back to cpu generation.
+
+IBM Power processors differ uniquely across generations (such as power6,
+power7, power8). Each generation signifies a new PowerISA version
+that exhibits features unique to that generation.
+The higher 16 bits of PVR for IBM Power processors encode the CPU
+generation, while the CPU chip (sub)version is encoded in lower 16 bits.
+
+For all practical purposes of launching a VM, we care about the
+generation which the vCPU will belong to, and not specifically the chip
+version. This patch updates the libvirt PVR check to reflect this
+relationship. It allows libvirt to select the right CPU generation
+in case the exact match for a a specific CPU is not found.
+Hence, there will no longer be a need to add each PowerPC CPU model to
+cpu_map.xml; just adding entry for the matching ISA generation will
+suffice.
+
+It also contains changes to cpu_map.xml since processor generations
+as understood by QEMU compat mode go as "power6", "power7" or "power8"
+[Reference : QEMU commit 8dfa3a5e85 ]
+
+Signed-off-by: Prerna Saxena <prerna@linux.vnet.ibm.com>
+Signed-off-by: Pradipta Kr. Banerjee <bpradip@in.ibm.com>
+Signed-off-by: Anton Blanchard <anton@samba.org>
+Reviewed-by: Michal Privoznik <mprivozn@redhat.com>
+(cherry picked from commit 1e911742287d964055f33ab76d53e673a9b4477f)
+---
+ src/cpu/cpu_map.xml   | 30 ++++++++++++++++++++++++++++++
+ src/cpu/cpu_powerpc.c |  8 ++++++++
+ 2 files changed, 38 insertions(+)
+
+diff --git a/src/cpu/cpu_map.xml b/src/cpu/cpu_map.xml
+index 18c7b0d..bd9b056 100644
+--- a/src/cpu/cpu_map.xml
++++ b/src/cpu/cpu_map.xml
+@@ -627,5 +627,35 @@
+       <pvr value='0x004b0100'/>
+     </model>
+ 
++    <model name='power6'>
++      <vendor name='IBM'/>
++      <compat isa='2.05'/>
++      <pvr value='0x003e0000'/>
++    </model>
++
++    <model name='power7'>
++      <vendor name='IBM'/>
++      <compat isa='2.06'/>
++      <pvr value='0x003f0000'/>
++    </model>
++
++    <model name='power7+'>
++      <vendor name='IBM'/>
++      <compat isa='2.06B'/>
++      <pvr value='0x004a0000'/>
++    </model>
++
++    <model name='power8e'>
++      <vendor name='IBM'/>
++      <compat isa='2.07'/>
++      <pvr value='0x004b0000'/>
++    </model>
++
++    <model name='power8'>
++      <vendor name='IBM'/>
++      <compat isa='2.07'/>
++      <pvr value='0x004d0000'/>
++    </model>
++
+   </arch>
+ </cpus>
+diff --git a/src/cpu/cpu_powerpc.c b/src/cpu/cpu_powerpc.c
+index 4ea1835..531868c 100644
+--- a/src/cpu/cpu_powerpc.c
++++ b/src/cpu/cpu_powerpc.c
+@@ -99,6 +99,14 @@ ppcModelFindPVR(const struct ppc_map *map,
+         model = model->next;
+     }
+ 
++    /* PowerPC Processor Version Register is interpreted as follows :
++     * Higher order 16 bits : Power ISA generation.
++     * Lower order 16 bits : CPU chip version number.
++     * If the exact CPU isnt found, return the nearest matching CPU generation
++     */
++    if (pvr & 0x0000FFFFul)
++        return ppcModelFindPVR(map, (pvr & 0xFFFF0000ul));
++
+     return NULL;
+ }
+ 
