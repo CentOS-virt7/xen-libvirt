@@ -57,7 +57,7 @@
 
 %define with_qemu_tcg      %{with_qemu}
 
-%define qemu_kvm_arches %{ix86} x86_64
+%define qemu_kvm_arches %{ix86} x86_64 aarch64
 
 %if 0%{?fedora}
     %if 0%{?fedora} < 16
@@ -159,8 +159,8 @@
 
 # Finally set the OS / architecture specific special cases
 
-# Xen is available only on x86_64
-%ifnarch %{ix86} x86_64 ia64
+# Xen is available only on x86_64 and aarch64
+%ifnarch %{ix86} x86_64 ia64 aarch64
     %define with_xen 0
     %define with_libxl 0
 %endif
@@ -372,12 +372,12 @@
 Summary: Library providing a simple virtualization API
 Name: libvirt
 Version: 1.2.15
-Release: 3%{?dist}%{?extra_release}
+Release: 4%{?dist}%{?extra_release}
 License: LGPLv2+
 Group: Development/Libraries
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root
 URL: http://libvirt.org/
-ExclusiveArch: x86_64
+ExclusiveArch: x86_64 aarch64
 
 %if %(echo %{version} | grep -o \\. | wc -l) == 3
     %define mainturl stable_updates/
@@ -385,6 +385,7 @@ ExclusiveArch: x86_64
 Source: http://libvirt.org/sources/%{?mainturl}libvirt-%{version}.tar.gz
 
 Patch1: 0001-caps-Don-t-default-to-i686-of-KVM-on-x86_64.patch
+Patch2: 0002-disable-paravirt-cpu-test.patch
 
 %if %{with_libvirtd}
 Requires: libvirt-daemon = %{version}-%{release}
@@ -546,8 +547,10 @@ BuildRequires: util-linux
 BuildRequires: /usr/bin/qemu-img
 %else
     %if %{with_xen}
+    %ifnarch aarch64
 # From Xen RPMs
 BuildRequires: /usr/sbin/qcow-create
+    %endif
     %endif
 %endif
 %if %{with_storage_lvm}
@@ -893,7 +896,9 @@ Requires: /usr/bin/qemu-img
             %else
                 %if %{with_xen}
 # From Xen RPMs
+                %ifnarch aarch64
 Requires: /usr/sbin/qcow-create
+                %endif
                 %endif
             %endif
 
@@ -2127,7 +2132,9 @@ exit 0
 %defattr(-, root, root)
 %config(noreplace) %{_sysconfdir}/libvirt/libxl.conf
 %config(noreplace) %{_sysconfdir}/libvirt/libxl-lockd.conf
+%if %{with_sanlock}
 %config(noreplace) %{_sysconfdir}/libvirt/libxl-sanlock.conf
+%endif
 %{_datadir}/augeas/lenses/libvirtd_libxl.aug
 %{_datadir}/augeas/lenses/tests/test_libvirtd_libxl.aug
 %dir %attr(0700, root, root) %{_localstatedir}/log/libvirt/libxl/
@@ -2302,6 +2309,9 @@ exit 0
 %doc examples/systemtap
 
 %changelog
+* Thu Sep 10 2015 George Dunlap <george.dunlap@eu.citrix.com> - 1.2.15-4
+- Port to aarch64
+
 * Thu May 18 2015 George Dunlap <george.dunlap@eu.citrix.com> - 1.2.15-3
 - Turn on with_xen and with_libxl for RHEL (CentOS)
 
