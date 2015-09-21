@@ -372,7 +372,7 @@
 Summary: Library providing a simple virtualization API
 Name: libvirt
 Version: 1.2.15
-Release: 4%{?dist}%{?extra_release}
+Release: 104%{?dist}%{?extra_release}
 License: LGPLv2+
 Group: Development/Libraries
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root
@@ -2309,6 +2309,9 @@ exit 0
 %doc examples/systemtap
 
 %changelog
+* Mon Sep 21 2015 George Dunlap <george.dunlap@eu.citrix.com> - 1.2.15-104
+- Gratuitious offset to build against Xen 4.6
+
 * Thu Sep 10 2015 George Dunlap <george.dunlap@eu.citrix.com> - 1.2.15-4
 - Port to aarch64
 
