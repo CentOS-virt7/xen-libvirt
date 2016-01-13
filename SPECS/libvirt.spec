@@ -372,7 +372,7 @@
 Summary: Library providing a simple virtualization API
 Name: libvirt
 Version: 1.3.0
-Release: 101%{?dist}%{?extra_release}
+Release: 1%{?dist}%{?extra_release}
 License: LGPLv2+
 Group: Development/Libraries
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root
@@ -2397,6 +2397,12 @@ exit 0
 - security fixes for CVE-2015-5247
 - a number of improvements and bug fixes
 
+* Mon Sep 21 2015 George Dunlap <george.dunlap@eu.citrix.com> - 1.2.15-104
+- Gratuitious offset to build against Xen 4.6
+
+* Thu Sep 10 2015 George Dunlap <george.dunlap@eu.citrix.com> - 1.2.15-4
+- Port to aarch64
+
 * Wed Sep  2 2015 Daniel Veillard <veillard@redhat.com> - 1.2.19-1
 - Big improvements on ppc64 support
 - New virDomainRename API
@@ -2419,12 +2425,6 @@ exit 0
 - libvirt: Introduce protected key mgmt ops
 - add domain vmport feature
 - various bug fixes and improvements
-
-* Mon Sep 21 2015 George Dunlap <george.dunlap@eu.citrix.com> - 1.2.15-104
-- Gratuitious offset to build against Xen 4.6
-
-* Thu Sep 10 2015 George Dunlap <george.dunlap@eu.citrix.com> - 1.2.15-4
-- Port to aarch64
 
 * Thu May 18 2015 George Dunlap <george.dunlap@eu.citrix.com> - 1.2.15-3
 - Turn on with_xen and with_libxl for RHEL (CentOS)
