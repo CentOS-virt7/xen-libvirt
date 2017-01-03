@@ -139,16 +139,6 @@
     %define with_firewalld 1
 %endif
 
-# RHEL-5 is too old for LXC
-%if 0%{?rhel} == 5
-    %define with_lxc 0
-%endif
-
-# Fedora doesn't have new enough Xen for libxl until F18
-%if 0%{?fedora} && 0%{?fedora} < 18
-    %define with_libxl 0
-%endif
-
 # fuse is used to provide virtualized /proc for LXC
 %if 0%{?fedora} || 0%{?rhel} >= 7
     %define with_fuse      0%{!?_without_fuse:1}
@@ -1900,6 +1890,9 @@ exit 0
 
 
 %changelog
+* Tue Jan  3 2017 George Dunlap <george.dunlap@citrix.com> - 2.2.0-1
+- Merge Xen changes
+
 * Mon Sep  5 2016 Daniel P. Berrange <berrange@redhat.com> - 2.2.0-1
 - Rebase to version 2.2.0
 
@@ -1975,6 +1968,12 @@ exit 0
 * Fri Oct  2 2015 Daniel P. Berrange <berrange@redhat.com> - 1.2.20-1
 - Update to 1.2.20 release
 
+* Mon Sep 21 2015 George Dunlap <george.dunlap@eu.citrix.com> - 1.2.15-104
+- Gratuitious offset to build against Xen 4.6
+
+* Thu Sep 10 2015 George Dunlap <george.dunlap@eu.citrix.com> - 1.2.15-4
+- Port to aarch64
+
 * Wed Sep  2 2015 Daniel P. Berrange <berrange@redhat.com> - 1.2.19-1
 - Update to 1.2.19 release
 
@@ -1990,29 +1989,6 @@ exit 0
 - hardening of migration code
 - a lot of improvement and bug fixes
 
-* Mon Jun  1 2015 Daniel Veillard <veillard@redhat.com> - 1.2.16-1
-- Introduce pci-serial
-- Introduce virDomainSetUserPassword API
-- libvirt: Introduce protected key mgmt ops
-- add domain vmport feature
-- various bug fixes and improvements
-
-* Mon Sep 21 2015 George Dunlap <george.dunlap@eu.citrix.com> - 1.2.15-104
-- Gratuitious offset to build against Xen 4.6
-
-* Thu Sep 10 2015 George Dunlap <george.dunlap@eu.citrix.com> - 1.2.15-4
-- Port to aarch64
-
-* Thu May 18 2015 George Dunlap <george.dunlap@eu.citrix.com> - 1.2.15-3
-- Turn on with_xen and with_libxl for RHEL (CentOS)
-
-* Mon May  4 2015 Daniel Veillard <veillard@redhat.com> - 1.2.15-1
-- Implement virDomainAddIOThread and virDomainDelIOThread
-- libxl: Introduce configuration file for libxl driver
-- Add VIR_DOMAIN_EVENT_ID_DEVICE_ADDED event
-- various improvements to parallels driver
-- a lot of improvement and bug fixes
-
 * Sun Jul 12 2015 Peter Robinson <pbrobinson@fedoraproject.org> 1.2.16-3
 - Rebuild (aarch64)
 
@@ -2022,8 +1998,25 @@ exit 0
 * Mon Jun 01 2015 Daniel P. Berrange <berrange@redhat.com> - 1.2.16-1
 - Update to 1.2.16 release
 
+* Mon Jun  1 2015 Daniel Veillard <veillard@redhat.com> - 1.2.16-1
+- Introduce pci-serial
+- Introduce virDomainSetUserPassword API
+- libvirt: Introduce protected key mgmt ops
+- add domain vmport feature
+- various bug fixes and improvements
+
+* Thu May 18 2015 George Dunlap <george.dunlap@eu.citrix.com> - 1.2.15-3
+- Turn on with_xen and with_libxl for RHEL (CentOS)
+
 * Thu May 07 2015 Richard W.M. Jones <rjones@redhat.com> - 1.2.15-2
-- Add Cole Robinson's patch to fix arch selection (bz# 1219198, bz#1219191)
+- Add Cole Robinson\'s patch to fix arch selection (bz# 1219198, bz#1219191)
+
+* Mon May  4 2015 Daniel Veillard <veillard@redhat.com> - 1.2.15-1
+- Implement virDomainAddIOThread and virDomainDelIOThread
+- libxl: Introduce configuration file for libxl driver
+- Add VIR_DOMAIN_EVENT_ID_DEVICE_ADDED event
+- various improvements to parallels driver
+- a lot of improvement and bug fixes
 
 * Mon May 04 2015 Cole Robinson <crobinso@redhat.com> - 1.2.15-1
 - Rebased to version 1.2.15
