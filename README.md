@@ -55,4 +55,4 @@ Then try to build the RPM and fix up anything that's broken:
 
 Finally add any future commits and send a pull request:
 
-    git commit -a "Updates to 2.2.0-1"
+    git commit -a -m "Updates to 2.2.0-1"
