@@ -288,6 +288,9 @@ Patch0107: 0107-qemu-Honour-on_reboot.patch
 # Fix disk images in /dev/shm (bz #1482146)
 Patch0108: 0108-qemuDomainBuildNamespace-Move-dev-mountpoints-later.patch
 
+# Fix build on CentOS 6
+Patch1001: 1001-libxl-Avoid-a-variable-named-stat.patch
+
 Requires: libvirt-daemon = %{version}-%{release}
 Requires: libvirt-daemon-config-network = %{version}-%{release}
 Requires: libvirt-daemon-config-nwfilter = %{version}-%{release}
