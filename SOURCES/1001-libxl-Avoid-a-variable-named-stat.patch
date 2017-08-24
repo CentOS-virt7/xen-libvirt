@@ -1,0 +1,48 @@
+From 50da727f73a02cf5ab3720ff8a2b0fbdae96c18f Mon Sep 17 00:00:00 2001
+From: George Dunlap <george.dunlap@citrix.com>
+Date: Thu, 24 Aug 2017 11:48:53 +0100
+Subject: [PATCH] libxl: Avoid a variable named 'stat'
+
+Using a variable named 'stat' clashes with the system function
+'stat()' causing compiler warnings on some platforms:
+
+libxl/libxl_driver.c: In function 'libxlDomainBlockStatsVBD':
+libxl/libxl_driver.c:5387: error: declaration of 'stat' shadows a global declaration [-Wshadow]
+/usr/include/sys/stat.h:455: error: shadowed declaration is here [-Wshadow]
+
+Signed-off-by: George Dunlap <george.dunlap@citrix.com>
+---
+ src/libxl/libxl_driver.c | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/src/libxl/libxl_driver.c b/src/libxl/libxl_driver.c
+index c261e2155..4c7775358 100644
+--- a/src/libxl/libxl_driver.c
++++ b/src/libxl/libxl_driver.c
+@@ -5374,7 +5374,7 @@ libxlDomainBlockStatsVBD(virDomainObjPtr vm,
+     int devno = libxlDiskPathToID(dev);
+     int size;
+     char *path, *name, *val;
+-    unsigned long long stat;
++    unsigned long long status;
+ 
+     path = name = val = NULL;
+     if (devno < 0) {
+@@ -5401,12 +5401,12 @@ libxlDomainBlockStatsVBD(virDomainObjPtr vm,
+ # define LIBXL_SET_VBDSTAT(FIELD, VAR, MUL)           \
+     if ((virAsprintf(&name, "%s/"FIELD, path) < 0) || \
+         (virFileReadAll(name, 256, &val) < 0) ||      \
+-        (sscanf(val, "%llu", &stat) != 1)) {          \
++        (sscanf(val, "%llu", &status) != 1)) {          \
+         virReportError(VIR_ERR_OPERATION_FAILED,      \
+                        _("cannot read %s"), name);    \
+         goto cleanup;                                 \
+     }                                                 \
+-    VAR += (stat * MUL);                              \
++    VAR += (status * MUL);                              \
+     VIR_FREE(name);                                   \
+     VIR_FREE(val);
+ 
+-- 
+2.14.1
+
