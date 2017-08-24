@@ -256,6 +256,9 @@ Patch0015: 0015-cpu-Drop-feature-filtering-from-virCPUUpdate.patch
 Patch0016: 0016-cpu-Introduce-virCPUGetHostIsSupported.patch
 Patch0017: 0017-qemu-Use-more-data-for-comparing-CPUs.patch
 
+# Fix build on CentOS 6
+Patch1001: 1001-libxl-Avoid-a-variable-named-stat.patch
+
 Requires: libvirt-daemon = %{version}-%{release}
 Requires: libvirt-daemon-config-network = %{version}-%{release}
 Requires: libvirt-daemon-config-nwfilter = %{version}-%{release}
