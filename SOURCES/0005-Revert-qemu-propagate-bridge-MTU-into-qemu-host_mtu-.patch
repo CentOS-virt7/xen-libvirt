@@ -1,0 +1,198 @@
+From: Laine Stump <laine@laine.org>
+Date: Thu, 18 May 2017 14:16:27 -0400
+Subject: [PATCH] Revert "qemu: propagate bridge MTU into qemu "host_mtu"
+ option"
+
+This reverts commit 2841e675.
+
+It turns out that adding the host_mtu field to the PCI capabilities in
+the guest bumps the length of PCI capabilities beyond the 32 byte
+boundary, so the virtio-net device gets 64 bytes of ioport space
+instead of 32, which offsets the address of all the other following
+devices. Migration doesn't work very well when the location and length
+of PCI capabilities of devices is changed between source and
+destination.
+
+This means that we need to make sure that the absence/presence of
+host_mtu on the qemu commandline always matches between source and
+destination, which means that we need to make setting of host_mtu an
+opt-in thing (it can't happen automatically when the bridge being used
+has a non-default MTU, which is what commit 2841e675 implemented).
+
+I do want to re-implement this feature with an <mtu auto='on'/>
+setting, but probably won't backport that to any stable branches, so
+I'm first reverting the original commit, and that revert can be pushed
+to the few releases that have been made since the original (3.1.0 -
+3.3.0)
+
+Resolves: https://bugzilla.redhat.com/1449346
+(cherry picked from commit 77780a29edace958a1f931d3281b962be4f5290e)
+(cherry picked from commit a2f5e87dceb1725c16cd4df17a4b7381ecf65901)
+---
+ src/qemu/qemu_command.c   | 32 ++++++++++----------------------
+ src/qemu/qemu_command.h   |  3 +--
+ src/qemu/qemu_hotplug.c   |  5 ++---
+ src/qemu/qemu_interface.c |  5 ++---
+ src/qemu/qemu_interface.h |  3 +--
+ 5 files changed, 16 insertions(+), 32 deletions(-)
+
+diff --git a/src/qemu/qemu_command.c b/src/qemu/qemu_command.c
+index 5feddc523..3abfe7b55 100644
+--- a/src/qemu/qemu_command.c
++++ b/src/qemu/qemu_command.c
+@@ -3629,8 +3629,7 @@ qemuBuildNicDevStr(virDomainDefPtr def,
+                    int vlan,
+                    unsigned int bootindex,
+                    size_t vhostfdSize,
+-                   virQEMUCapsPtr qemuCaps,
+-                   unsigned int mtu)
++                   virQEMUCapsPtr qemuCaps)
+ {
+     virBuffer buf = VIR_BUFFER_INITIALIZER;
+     const char *nic = net->model;
+@@ -3754,23 +3753,13 @@ qemuBuildNicDevStr(virDomainDefPtr def,
+         virBufferAsprintf(&buf, ",rx_queue_size=%u", net->driver.virtio.rx_queue_size);
+     }
+ 
+-    if (usingVirtio && mtu) {
+-        if (virQEMUCapsGet(qemuCaps, QEMU_CAPS_VIRTIO_NET_HOST_MTU)) {
+-
+-            virBufferAsprintf(&buf, ",host_mtu=%u", mtu);
+-
+-        } else {
+-            /* log an error if mtu was requested specifically for this
+-             * interface, otherwise, if it's just what was reported by
+-             * the attached network, ignore it.
+-             */
+-            if (net->mtu) {
+-                virReportError(VIR_ERR_CONFIG_UNSUPPORTED, "%s",
+-                               _("setting MTU is not supported with "
+-                                 "this QEMU binary"));
+-                goto error;
+-            }
++    if (usingVirtio && net->mtu) {
++        if (!virQEMUCapsGet(qemuCaps, QEMU_CAPS_VIRTIO_NET_HOST_MTU)) {
++            virReportError(VIR_ERR_CONFIG_UNSUPPORTED, "%s",
++                           _("setting MTU is not supported with this QEMU binary"));
++            goto error;
+         }
++        virBufferAsprintf(&buf, ",host_mtu=%u", net->mtu);
+     }
+ 
+     if (vlan == -1)
+@@ -8213,7 +8202,7 @@ qemuBuildVhostuserCommandLine(virQEMUDriverPtr driver,
+     VIR_FREE(netdev);
+ 
+     if (!(nic = qemuBuildNicDevStr(def, net, -1, bootindex,
+-                                   queues, qemuCaps, net->mtu))) {
++                                   queues, qemuCaps))) {
+         virReportError(VIR_ERR_INTERNAL_ERROR,
+                        "%s", _("Error generating NIC -device string"));
+         goto error;
+@@ -8259,7 +8248,6 @@ qemuBuildInterfaceCommandLine(virQEMUDriverPtr driver,
+     virDomainNetType actualType = virDomainNetGetActualType(net);
+     virNetDevBandwidthPtr actualBandwidth;
+     size_t i;
+-    unsigned int mtu = net->mtu;
+ 
+ 
+     if (!bootindex)
+@@ -8314,7 +8302,7 @@ qemuBuildInterfaceCommandLine(virQEMUDriverPtr driver,
+         memset(tapfd, -1, tapfdSize * sizeof(tapfd[0]));
+ 
+         if (qemuInterfaceBridgeConnect(def, driver, net,
+-                                       tapfd, &tapfdSize, &mtu) < 0)
++                                       tapfd, &tapfdSize) < 0)
+             goto cleanup;
+         break;
+ 
+@@ -8494,7 +8482,7 @@ qemuBuildInterfaceCommandLine(virQEMUDriverPtr driver,
+     }
+     if (qemuDomainSupportsNicdev(def, net)) {
+         if (!(nic = qemuBuildNicDevStr(def, net, vlan, bootindex,
+-                                       vhostfdSize, qemuCaps, mtu)))
++                                       vhostfdSize, qemuCaps)))
+             goto cleanup;
+         virCommandAddArgList(cmd, "-device", nic, NULL);
+     } else {
+diff --git a/src/qemu/qemu_command.h b/src/qemu/qemu_command.h
+index 7da92c8c9..09cb00ee9 100644
+--- a/src/qemu/qemu_command.h
++++ b/src/qemu/qemu_command.h
+@@ -101,8 +101,7 @@ char *qemuBuildNicDevStr(virDomainDefPtr def,
+                          int vlan,
+                          unsigned int bootindex,
+                          size_t vhostfdSize,
+-                         virQEMUCapsPtr qemuCaps,
+-                         unsigned int mtu);
++                         virQEMUCapsPtr qemuCaps);
+ 
+ char *qemuDeviceDriveHostAlias(virDomainDiskDefPtr disk);
+ 
+diff --git a/src/qemu/qemu_hotplug.c b/src/qemu/qemu_hotplug.c
+index f133d04a8..2a4159560 100644
+--- a/src/qemu/qemu_hotplug.c
++++ b/src/qemu/qemu_hotplug.c
+@@ -968,7 +968,6 @@ qemuDomainAttachNetDevice(virQEMUDriverPtr driver,
+     bool charDevPlugged = false;
+     bool netdevPlugged = false;
+     bool hostPlugged = false;
+-    unsigned int mtu = net->mtu;
+ 
+     /* preallocate new slot for device */
+     if (VIR_REALLOC_N(vm->def->nets, vm->def->nnets + 1) < 0)
+@@ -1025,7 +1024,7 @@ qemuDomainAttachNetDevice(virQEMUDriverPtr driver,
+             goto cleanup;
+         memset(vhostfd, -1, sizeof(*vhostfd) * vhostfdSize);
+         if (qemuInterfaceBridgeConnect(vm->def, driver, net,
+-                                       tapfd, &tapfdSize, &mtu) < 0)
++                                       tapfd, &tapfdSize) < 0)
+             goto cleanup;
+         iface_connected = true;
+         if (qemuInterfaceOpenVhostNet(vm->def, net, priv->qemuCaps,
+@@ -1239,7 +1238,7 @@ qemuDomainAttachNetDevice(virQEMUDriverPtr driver,
+         VIR_FORCE_CLOSE(vhostfd[i]);
+ 
+     if (!(nicstr = qemuBuildNicDevStr(vm->def, net, vlan, 0,
+-                                      queueSize, priv->qemuCaps, mtu)))
++                                      queueSize, priv->qemuCaps)))
+         goto try_remove;
+ 
+     qemuDomainObjEnterMonitor(driver, vm);
+diff --git a/src/qemu/qemu_interface.c b/src/qemu/qemu_interface.c
+index c5dca60f1..ce448d243 100644
+--- a/src/qemu/qemu_interface.c
++++ b/src/qemu/qemu_interface.c
+@@ -503,8 +503,7 @@ qemuInterfaceBridgeConnect(virDomainDefPtr def,
+                            virQEMUDriverPtr driver,
+                            virDomainNetDefPtr net,
+                            int *tapfd,
+-                           size_t *tapfdSize,
+-                           unsigned int *mtu)
++                           size_t *tapfdSize)
+ {
+     const char *brname;
+     int ret = -1;
+@@ -545,7 +544,7 @@ qemuInterfaceBridgeConnect(virDomainDefPtr def,
+                                            def->uuid, tunpath, tapfd, *tapfdSize,
+                                            virDomainNetGetActualVirtPortProfile(net),
+                                            virDomainNetGetActualVlan(net),
+-                                           net->mtu, mtu,
++                                           0, NULL,
+                                            tap_create_flags) < 0) {
+             virDomainAuditNetDevice(def, net, tunpath, false);
+             goto cleanup;
+diff --git a/src/qemu/qemu_interface.h b/src/qemu/qemu_interface.h
+index ba74ac2cf..a7faa0b3d 100644
+--- a/src/qemu/qemu_interface.h
++++ b/src/qemu/qemu_interface.h
+@@ -51,8 +51,7 @@ int qemuInterfaceBridgeConnect(virDomainDefPtr def,
+                                virQEMUDriverPtr driver,
+                                virDomainNetDefPtr net,
+                                int *tapfd,
+-                               size_t *tapfdSize,
+-                               unsigned int *mtu)
++                               size_t *tapfdSize)
+     ATTRIBUTE_NONNULL(2);
+ 
+ int qemuInterfaceOpenVhostNet(virDomainDefPtr def,

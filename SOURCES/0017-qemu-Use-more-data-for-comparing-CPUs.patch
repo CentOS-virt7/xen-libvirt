@@ -1,0 +1,164 @@
+From: Jiri Denemark <jdenemar@redhat.com>
+Date: Tue, 11 Apr 2017 20:46:05 +0200
+Subject: [PATCH] qemu: Use more data for comparing CPUs
+
+With QEMU older than 2.9.0 libvirt uses CPUID instruction to determine
+what CPU features are supported on the host. This was later used when
+checking compatibility of guest CPUs. Since QEMU 2.9.0 we ask QEMU for
+the host CPU data. But the two methods we use usually provide disjoint
+sets of CPU features because QEMU/KVM does not support all features
+provided by the host CPU and on the other hand it can enable some
+feature even if the host CPU does not support them.
+
+So if there is a domain which requires a CPU features disabled by
+QEMU/KVM, libvirt will refuse to start it with QEMU > 2.9.0 as its guest
+CPU is incompatible with the host CPU data we got from QEMU. But such
+domain would happily start on older QEMU (of course, the features would
+be missing the guest CPU). To fix this regression, we need to combine
+both CPU feature sets when checking guest CPU compatibility.
+
+https://bugzilla.redhat.com/show_bug.cgi?id=1439933
+
+Signed-off-by: Jiri Denemark <jdenemar@redhat.com>
+(cherry picked from commit 5b4a6adb5ca24a6cb91cdc55c31506fb278d3a91)
+---
+ src/qemu/qemu_capabilities.c | 35 +++++++++++++++++++++++++++++++++--
+ src/qemu/qemu_capabilities.h |  4 ++++
+ src/qemu/qemu_process.c      |  2 +-
+ 3 files changed, 38 insertions(+), 3 deletions(-)
+
+diff --git a/src/qemu/qemu_capabilities.c b/src/qemu/qemu_capabilities.c
+index 7fc577546..01bd4750c 100644
+--- a/src/qemu/qemu_capabilities.c
++++ b/src/qemu/qemu_capabilities.c
+@@ -386,6 +386,10 @@ struct _virQEMUCapsHostCPUData {
+     virCPUDefPtr reported;
+     /* Migratable host CPU definition used for updating guest CPU. */
+     virCPUDefPtr migratable;
++    /* CPU definition with features detected by libvirt using virCPUGetHost
++     * combined with features reported by QEMU. This is used for backward
++     * compatible comparison between a guest CPU and a host CPU. */
++    virCPUDefPtr full;
+ };
+ 
+ /*
+@@ -2106,6 +2110,10 @@ virQEMUCapsHostCPUDataCopy(virQEMUCapsHostCPUDataPtr dst,
+         !(dst->migratable = virCPUDefCopy(src->migratable)))
+         return -1;
+ 
++    if (src->full &&
++        !(dst->full = virCPUDefCopy(src->full)))
++        return -1;
++
+     return 0;
+ }
+ 
+@@ -2116,6 +2124,7 @@ virQEMUCapsHostCPUDataClear(virQEMUCapsHostCPUDataPtr cpuData)
+     qemuMonitorCPUModelInfoFree(cpuData->info);
+     virCPUDefFree(cpuData->reported);
+     virCPUDefFree(cpuData->migratable);
++    virCPUDefFree(cpuData->full);
+ 
+     memset(cpuData, 0, sizeof(*cpuData));
+ }
+@@ -2457,6 +2466,11 @@ virQEMUCapsGetHostModel(virQEMUCapsPtr qemuCaps,
+ 
+     case VIR_QEMU_CAPS_HOST_CPU_MIGRATABLE:
+         return cpuData->migratable;
++
++    case VIR_QEMU_CAPS_HOST_CPU_FULL:
++        /* 'full' is non-NULL only if we have data from both QEMU and
++         * virCPUGetHost */
++        return cpuData->full ? cpuData->full : cpuData->reported;
+     }
+ 
+     return NULL;
+@@ -2467,12 +2481,14 @@ static void
+ virQEMUCapsSetHostModel(virQEMUCapsPtr qemuCaps,
+                         virDomainVirtType type,
+                         virCPUDefPtr reported,
+-                        virCPUDefPtr migratable)
++                        virCPUDefPtr migratable,
++                        virCPUDefPtr full)
+ {
+     virQEMUCapsHostCPUDataPtr cpuData = virQEMUCapsGetHostCPUData(qemuCaps, type);
+ 
+     cpuData->reported = reported;
+     cpuData->migratable = migratable;
++    cpuData->full = full;
+ }
+ 
+ 
+@@ -3344,6 +3360,8 @@ virQEMUCapsInitHostCPUModel(virQEMUCapsPtr qemuCaps,
+     virCPUDefPtr cpu = NULL;
+     virCPUDefPtr migCPU = NULL;
+     virCPUDefPtr hostCPU = NULL;
++    virCPUDefPtr fullCPU = NULL;
++    size_t i;
+     int rc;
+ 
+     if (!caps || !virQEMUCapsGuestIsNative(caps->host.arch, qemuCaps->arch))
+@@ -3363,6 +3381,18 @@ virQEMUCapsInitHostCPUModel(virQEMUCapsPtr qemuCaps,
+                                      virQEMUCapsCPUFilterFeatures,
+                                      qemuCaps) < 0)
+             goto error;
++    } else if (type == VIR_DOMAIN_VIRT_KVM &&
++               virCPUGetHostIsSupported(qemuCaps->arch)) {
++        if (!(fullCPU = virCPUGetHost(qemuCaps->arch, VIR_CPU_TYPE_GUEST,
++                                      NULL, NULL, 0)))
++            goto error;
++
++        for (i = 0; i < cpu->nfeatures; i++) {
++            if (cpu->features[i].policy == VIR_CPU_FEATURE_REQUIRE &&
++                virCPUDefUpdateFeature(fullCPU, cpu->features[i].name,
++                                       VIR_CPU_FEATURE_REQUIRE) < 0)
++                goto error;
++        }
+     }
+ 
+     if (!(migCPU = virQEMUCapsNewHostCPUModel()))
+@@ -3378,7 +3408,7 @@ virQEMUCapsInitHostCPUModel(virQEMUCapsPtr qemuCaps,
+             goto error;
+     }
+ 
+-    virQEMUCapsSetHostModel(qemuCaps, type, cpu, migCPU);
++    virQEMUCapsSetHostModel(qemuCaps, type, cpu, migCPU, fullCPU);
+ 
+  cleanup:
+     virCPUDefFree(hostCPU);
+@@ -3387,6 +3417,7 @@ virQEMUCapsInitHostCPUModel(virQEMUCapsPtr qemuCaps,
+  error:
+     virCPUDefFree(cpu);
+     virCPUDefFree(migCPU);
++    virCPUDefFree(fullCPU);
+     virResetLastError();
+     goto cleanup;
+ }
+diff --git a/src/qemu/qemu_capabilities.h b/src/qemu/qemu_capabilities.h
+index 31818c940..4e9561c0a 100644
+--- a/src/qemu/qemu_capabilities.h
++++ b/src/qemu/qemu_capabilities.h
+@@ -455,6 +455,10 @@ typedef enum {
+     VIR_QEMU_CAPS_HOST_CPU_REPORTED,
+     /* Migratable host CPU definition used for updating guest CPU. */
+     VIR_QEMU_CAPS_HOST_CPU_MIGRATABLE,
++    /* CPU definition with features detected by libvirt using virCPUGetHost
++     * combined with features reported by QEMU. This is used for backward
++     * compatible comparison between a guest CPU and a host CPU. */
++    VIR_QEMU_CAPS_HOST_CPU_FULL,
+ } virQEMUCapsHostCPUType;
+ 
+ virCPUDefPtr virQEMUCapsGetHostModel(virQEMUCapsPtr qemuCaps,
+diff --git a/src/qemu/qemu_process.c b/src/qemu/qemu_process.c
+index e67736638..992a7174b 100644
+--- a/src/qemu/qemu_process.c
++++ b/src/qemu/qemu_process.c
+@@ -5300,7 +5300,7 @@ qemuProcessUpdateGuestCPU(virDomainDefPtr def,
+     if (def->cpu->check == VIR_CPU_CHECK_PARTIAL &&
+         virCPUCompare(caps->host.arch,
+                       virQEMUCapsGetHostModel(qemuCaps, def->virtType,
+-                                              VIR_QEMU_CAPS_HOST_CPU_REPORTED),
++                                              VIR_QEMU_CAPS_HOST_CPU_FULL),
+                       def->cpu, true) < 0)
+         return -1;
+ 

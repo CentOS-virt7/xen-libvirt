@@ -1,0 +1,139 @@
+From: Jiri Denemark <jdenemar@redhat.com>
+Date: Wed, 29 Mar 2017 13:33:50 +0200
+Subject: [PATCH] qemu: Add migratable parameter to virQEMUCapsInitCPUModel
+
+The caller can ask for a migratable CPU model by passing true for the
+new parameter.
+
+Signed-off-by: Jiri Denemark <jdenemar@redhat.com>
+(cherry picked from commit 00e0cbcb567a57c7b5a145d7fd3fb662779f6bec)
+---
+ src/qemu/qemu_capabilities.c | 36 +++++++++++++++++++++++++-----------
+ src/qemu/qemu_capspriv.h     |  3 ++-
+ tests/cputest.c              |  2 +-
+ 3 files changed, 28 insertions(+), 13 deletions(-)
+
+diff --git a/src/qemu/qemu_capabilities.c b/src/qemu/qemu_capabilities.c
+index 1a15750a3..b8e4e47b6 100644
+--- a/src/qemu/qemu_capabilities.c
++++ b/src/qemu/qemu_capabilities.c
+@@ -3112,7 +3112,8 @@ virQEMUCapsCPUFilterFeatures(const char *name,
+ static int
+ virQEMUCapsInitCPUModelS390(virQEMUCapsPtr qemuCaps,
+                             qemuMonitorCPUModelInfoPtr modelInfo,
+-                            virCPUDefPtr cpu)
++                            virCPUDefPtr cpu,
++                            bool migratable)
+ {
+     size_t i;
+ 
+@@ -3140,8 +3141,12 @@ virQEMUCapsInitCPUModelS390(virQEMUCapsPtr qemuCaps,
+ 
+         if (VIR_STRDUP(feature->name, prop->name) < 0)
+             return -1;
+-        feature->policy = prop->value.boolean ? VIR_CPU_FEATURE_REQUIRE
+-                                              : VIR_CPU_FEATURE_DISABLE;
++
++        if (!prop->value.boolean ||
++            (migratable && prop->migratable == VIR_TRISTATE_BOOL_NO))
++            feature->policy = VIR_CPU_FEATURE_DISABLE;
++        else
++            feature->policy = VIR_CPU_FEATURE_REQUIRE;
+         cpu->nfeatures++;
+     }
+ 
+@@ -3158,7 +3163,8 @@ static int
+ virQEMUCapsInitCPUModelX86(virQEMUCapsPtr qemuCaps,
+                            virDomainVirtType type,
+                            qemuMonitorCPUModelInfoPtr model,
+-                           virCPUDefPtr cpu)
++                           virCPUDefPtr cpu,
++                           bool migratable)
+ {
+     virCPUDataPtr data = NULL;
+     unsigned long long sigFamily = 0;
+@@ -3179,9 +3185,13 @@ virQEMUCapsInitCPUModelX86(virQEMUCapsPtr qemuCaps,
+ 
+         switch (prop->type) {
+         case QEMU_MONITOR_CPU_PROPERTY_BOOLEAN:
+-            if (prop->value.boolean &&
+-                virCPUx86DataAddFeature(data, prop->name) < 0)
++            if (!prop->value.boolean ||
++                (migratable && prop->migratable == VIR_TRISTATE_BOOL_NO))
++                continue;
++
++            if (virCPUx86DataAddFeature(data, prop->name) < 0)
+                 goto cleanup;
++
+             break;
+ 
+         case QEMU_MONITOR_CPU_PROPERTY_STRING:
+@@ -3220,13 +3230,14 @@ virQEMUCapsInitCPUModelX86(virQEMUCapsPtr qemuCaps,
+ 
+ /**
+  * Returns  0 when host CPU model provided by QEMU was filled in qemuCaps,
+- *          1 when the caller should fall back to using virCapsPtr->host.cpu,
++ *          1 when the caller should fall back to other methods
+  *         -1 on error.
+  */
+ int
+ virQEMUCapsInitCPUModel(virQEMUCapsPtr qemuCaps,
+                         virDomainVirtType type,
+-                        virCPUDefPtr cpu)
++                        virCPUDefPtr cpu,
++                        bool migratable)
+ {
+     qemuMonitorCPUModelInfoPtr model;
+     int ret = 1;
+@@ -3236,10 +3247,13 @@ virQEMUCapsInitCPUModel(virQEMUCapsPtr qemuCaps,
+     else
+         model = qemuCaps->tcgCPUModelInfo;
+ 
++    if (migratable && model && !model->migratability)
++        return 1;
++
+     if (ARCH_IS_S390(qemuCaps->arch))
+-        ret = virQEMUCapsInitCPUModelS390(qemuCaps, model, cpu);
++        ret = virQEMUCapsInitCPUModelS390(qemuCaps, model, cpu, migratable);
+     else if (ARCH_IS_X86(qemuCaps->arch))
+-        ret = virQEMUCapsInitCPUModelX86(qemuCaps, type, model, cpu);
++        ret = virQEMUCapsInitCPUModelX86(qemuCaps, type, model, cpu, migratable);
+ 
+     if (ret == 0)
+         cpu->fallback = VIR_CPU_FALLBACK_FORBID;
+@@ -3268,7 +3282,7 @@ virQEMUCapsInitHostCPUModel(virQEMUCapsPtr qemuCaps,
+     cpu->match = VIR_CPU_MATCH_EXACT;
+     cpu->fallback = VIR_CPU_FALLBACK_ALLOW;
+ 
+-    if ((rc = virQEMUCapsInitCPUModel(qemuCaps, type, cpu)) < 0) {
++    if ((rc = virQEMUCapsInitCPUModel(qemuCaps, type, cpu, false)) < 0) {
+         goto error;
+     } else if (rc == 1) {
+         VIR_DEBUG("No host CPU model info from QEMU; probing host CPU directly");
+diff --git a/src/qemu/qemu_capspriv.h b/src/qemu/qemu_capspriv.h
+index 61ccd4517..1baaaf334 100644
+--- a/src/qemu/qemu_capspriv.h
++++ b/src/qemu/qemu_capspriv.h
+@@ -81,7 +81,8 @@ virQEMUCapsInitHostCPUModel(virQEMUCapsPtr qemuCaps,
+ int
+ virQEMUCapsInitCPUModel(virQEMUCapsPtr qemuCaps,
+                         virDomainVirtType type,
+-                        virCPUDefPtr cpu);
++                        virCPUDefPtr cpu,
++                        bool migratable);
+ 
+ void
+ virQEMUCapsSetCPUModelInfo(virQEMUCapsPtr qemuCaps,
+diff --git a/tests/cputest.c b/tests/cputest.c
+index 3d3e43f16..8c07cf4f6 100644
+--- a/tests/cputest.c
++++ b/tests/cputest.c
+@@ -709,7 +709,7 @@ cpuTestJSONCPUID(const void *arg)
+     cpu->match = VIR_CPU_MATCH_EXACT;
+     cpu->fallback = VIR_CPU_FALLBACK_FORBID;
+ 
+-    if (virQEMUCapsInitCPUModel(qemuCaps, VIR_DOMAIN_VIRT_KVM, cpu) != 0)
++    if (virQEMUCapsInitCPUModel(qemuCaps, VIR_DOMAIN_VIRT_KVM, cpu, false) != 0)
+         goto cleanup;
+ 
+     ret = cpuTestCompareXML(data->arch, cpu, result, false);
