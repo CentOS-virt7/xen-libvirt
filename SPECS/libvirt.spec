@@ -221,7 +221,7 @@
 Summary: Library providing a simple virtualization API
 Name: libvirt
 Version: 3.2.1
-Release: 402%{?dist}%{?extra_release}
+Release: 480%{?dist}%{?extra_release}
 License: LGPLv2+
 Group: Development/Libraries
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root
@@ -2094,6 +2094,9 @@ exit 0
 
 
 %changelog
+* Fri Nov 24 2017 Anthony PERARD <anthony.perard@citrix.com> - 3.2.1-480
+- Xen 4.8 rebuild
+
 * Thu Aug 24 2017 George Dunlap <george.dunlap@citrix.com> - 3.2.1-402
 - Include patch to fix build error on CentOS 6
 
@@ -2257,7 +2260,7 @@ exit 0
 - add domain vmport feature
 - various bug fixes and improvements
 
-* Thu May 18 2015 George Dunlap <george.dunlap@eu.citrix.com> - 1.2.15-3
+* Mon May 18 2015 George Dunlap <george.dunlap@eu.citrix.com> - 1.2.15-3
 - Turn on with_xen and with_libxl for RHEL (CentOS)
 
 * Thu May 07 2015 Richard W.M. Jones <rjones@redhat.com> - 1.2.15-2
