@@ -221,7 +221,7 @@
 Summary: Library providing a simple virtualization API
 Name: libvirt
 Version: 3.2.1
-Release: 4%{?dist}%{?extra_release}
+Release: 402%{?dist}%{?extra_release}
 License: LGPLv2+
 Group: Development/Libraries
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root
@@ -2094,6 +2094,9 @@ exit 0
 
 
 %changelog
+* Thu Aug 24 2017 George Dunlap <george.dunlap@citrix.com> - 3.2.1-402
+- Include patch to fix build error on CentOS 6
+
 * Tue Aug 22 2017 George Dunlap <george.dunlap@citrix.com> - 3.2.1-4
 - Merge Xen changes
 
