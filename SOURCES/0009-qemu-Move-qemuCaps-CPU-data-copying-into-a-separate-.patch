@@ -1,0 +1,70 @@
+From: Jiri Denemark <jdenemar@redhat.com>
+Date: Fri, 7 Apr 2017 17:40:31 +0200
+Subject: [PATCH] qemu: Move qemuCaps CPU data copying into a separate function
+
+This introduces virQEMUCapsHostCPUDataCopy which will later be
+refactored a bit and called twice from virQEMUCapsNewCopy.
+
+Signed-off-by: Jiri Denemark <jdenemar@redhat.com>
+(cherry picked from commit 8be4346ca5ae4b568b3e8ce3de9cf46f2e94b416)
+---
+ src/qemu/qemu_capabilities.c | 39 +++++++++++++++++++++++++--------------
+ 1 file changed, 25 insertions(+), 14 deletions(-)
+
+diff --git a/src/qemu/qemu_capabilities.c b/src/qemu/qemu_capabilities.c
+index f6020b86d..d17e0e8b8 100644
+--- a/src/qemu/qemu_capabilities.c
++++ b/src/qemu/qemu_capabilities.c
+@@ -2082,6 +2082,30 @@ virQEMUCapsNew(void)
+ }
+ 
+ 
++static int
++virQEMUCapsHostCPUDataCopy(virQEMUCapsPtr dst,
++                           virQEMUCapsPtr src)
++{
++    if (src->kvmCPUModel &&
++        !(dst->kvmCPUModel = virCPUDefCopy(src->kvmCPUModel)))
++        return -1;
++
++    if (src->tcgCPUModel &&
++        !(dst->tcgCPUModel = virCPUDefCopy(src->tcgCPUModel)))
++        return -1;
++
++    if (src->kvmCPUModelInfo &&
++        !(dst->kvmCPUModelInfo = qemuMonitorCPUModelInfoCopy(src->kvmCPUModelInfo)))
++        return -1;
++
++    if (src->tcgCPUModelInfo &&
++        !(dst->tcgCPUModelInfo = qemuMonitorCPUModelInfoCopy(src->tcgCPUModelInfo)))
++        return -1;
++
++    return 0;
++}
++
++
+ virQEMUCapsPtr virQEMUCapsNewCopy(virQEMUCapsPtr qemuCaps)
+ {
+     virQEMUCapsPtr ret = virQEMUCapsNew();
+@@ -2119,20 +2143,7 @@ virQEMUCapsPtr virQEMUCapsNewCopy(virQEMUCapsPtr qemuCaps)
+             goto error;
+     }
+ 
+-    if (qemuCaps->kvmCPUModel &&
+-        !(ret->kvmCPUModel = virCPUDefCopy(qemuCaps->kvmCPUModel)))
+-        goto error;
+-
+-    if (qemuCaps->tcgCPUModel &&
+-        !(ret->tcgCPUModel = virCPUDefCopy(qemuCaps->tcgCPUModel)))
+-        goto error;
+-
+-    if (qemuCaps->kvmCPUModelInfo &&
+-        !(ret->kvmCPUModelInfo = qemuMonitorCPUModelInfoCopy(qemuCaps->kvmCPUModelInfo)))
+-        goto error;
+-
+-    if (qemuCaps->tcgCPUModelInfo &&
+-        !(ret->tcgCPUModelInfo = qemuMonitorCPUModelInfoCopy(qemuCaps->tcgCPUModelInfo)))
++    if (virQEMUCapsHostCPUDataCopy(ret, qemuCaps) < 0)
+         goto error;
+ 
+     if (VIR_ALLOC_N(ret->machineTypes, qemuCaps->nmachineTypes) < 0)

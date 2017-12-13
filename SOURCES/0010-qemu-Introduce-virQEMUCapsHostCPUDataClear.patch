@@ -1,0 +1,67 @@
+From: Jiri Denemark <jdenemar@redhat.com>
+Date: Fri, 7 Apr 2017 17:43:59 +0200
+Subject: [PATCH] qemu: Introduce virQEMUCapsHostCPUDataClear
+
+To keep freeing of host CPU data in one place.
+
+Signed-off-by: Jiri Denemark <jdenemar@redhat.com>
+(cherry picked from commit b0605e848724c5dc478382398b734398abff674c)
+---
+ src/qemu/qemu_capabilities.c | 30 +++++++++++++++++-------------
+ 1 file changed, 17 insertions(+), 13 deletions(-)
+
+diff --git a/src/qemu/qemu_capabilities.c b/src/qemu/qemu_capabilities.c
+index d17e0e8b8..2da53a60b 100644
+--- a/src/qemu/qemu_capabilities.c
++++ b/src/qemu/qemu_capabilities.c
+@@ -2106,6 +2106,21 @@ virQEMUCapsHostCPUDataCopy(virQEMUCapsPtr dst,
+ }
+ 
+ 
++static void
++virQEMUCapsHostCPUDataClear(virQEMUCapsPtr qemuCaps)
++{
++    qemuMonitorCPUModelInfoFree(qemuCaps->kvmCPUModelInfo);
++    qemuMonitorCPUModelInfoFree(qemuCaps->tcgCPUModelInfo);
++    qemuCaps->kvmCPUModelInfo = NULL;
++    qemuCaps->tcgCPUModelInfo = NULL;
++
++    virCPUDefFree(qemuCaps->kvmCPUModel);
++    virCPUDefFree(qemuCaps->tcgCPUModel);
++    qemuCaps->kvmCPUModel = NULL;
++    qemuCaps->tcgCPUModel = NULL;
++}
++
++
+ virQEMUCapsPtr virQEMUCapsNewCopy(virQEMUCapsPtr qemuCaps)
+ {
+     virQEMUCapsPtr ret = virQEMUCapsNew();
+@@ -2192,10 +2207,7 @@ void virQEMUCapsDispose(void *obj)
+ 
+     VIR_FREE(qemuCaps->gicCapabilities);
+ 
+-    qemuMonitorCPUModelInfoFree(qemuCaps->kvmCPUModelInfo);
+-    qemuMonitorCPUModelInfoFree(qemuCaps->tcgCPUModelInfo);
+-    virCPUDefFree(qemuCaps->kvmCPUModel);
+-    virCPUDefFree(qemuCaps->tcgCPUModel);
++    virQEMUCapsHostCPUDataClear(qemuCaps);
+ }
+ 
+ void
+@@ -4068,15 +4080,7 @@ virQEMUCapsReset(virQEMUCapsPtr qemuCaps)
+     VIR_FREE(qemuCaps->gicCapabilities);
+     qemuCaps->ngicCapabilities = 0;
+ 
+-    qemuMonitorCPUModelInfoFree(qemuCaps->kvmCPUModelInfo);
+-    qemuMonitorCPUModelInfoFree(qemuCaps->tcgCPUModelInfo);
+-    qemuCaps->kvmCPUModelInfo = NULL;
+-    qemuCaps->tcgCPUModelInfo = NULL;
+-
+-    virCPUDefFree(qemuCaps->kvmCPUModel);
+-    virCPUDefFree(qemuCaps->tcgCPUModel);
+-    qemuCaps->kvmCPUModel = NULL;
+-    qemuCaps->tcgCPUModel = NULL;
++    virQEMUCapsHostCPUDataClear(qemuCaps);
+ }
+ 
+ 

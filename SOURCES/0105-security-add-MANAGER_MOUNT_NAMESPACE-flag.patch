@@ -1,0 +1,108 @@
+From: Cole Robinson <crobinso@redhat.com>
+Date: Sun, 27 Aug 2017 11:23:47 -0400
+Subject: [PATCH] security: add MANAGER_MOUNT_NAMESPACE flag
+
+The VIR_SECURITY_MANAGER_MOUNT_NAMESPACE flag informs the DAC driver
+if mount namespaces are in use for the VM. Will be used for future
+changes.
+
+Wire it up in the qemu driver
+
+(cherry picked from commit 321031e482425dfeae0f125cdac6df870f079efd)
+---
+ src/qemu/qemu_driver.c          |  2 ++
+ src/security/security_dac.c     | 10 ++++++++++
+ src/security/security_dac.h     |  3 +++
+ src/security/security_manager.c |  4 +++-
+ src/security/security_manager.h |  1 +
+ 5 files changed, 19 insertions(+), 1 deletion(-)
+
+diff --git a/src/qemu/qemu_driver.c b/src/qemu/qemu_driver.c
+index ce844bb04..555a1009b 100644
+--- a/src/qemu/qemu_driver.c
++++ b/src/qemu/qemu_driver.c
+@@ -417,6 +417,8 @@ qemuSecurityInit(virQEMUDriverPtr driver)
+     if (virQEMUDriverIsPrivileged(driver)) {
+         if (cfg->dynamicOwnership)
+             flags |= VIR_SECURITY_MANAGER_DYNAMIC_OWNERSHIP;
++        if (virBitmapIsBitSet(cfg->namespaces, QEMU_DOMAIN_NS_MOUNT))
++            flags |= VIR_SECURITY_MANAGER_MOUNT_NAMESPACE;
+         if (!(mgr = qemuSecurityNewDAC(QEMU_DRIVER_NAME,
+                                        cfg->user,
+                                        cfg->group,
+diff --git a/src/security/security_dac.c b/src/security/security_dac.c
+index 922e48494..1f8d279bf 100644
+--- a/src/security/security_dac.c
++++ b/src/security/security_dac.c
+@@ -57,6 +57,7 @@ struct _virSecurityDACData {
+     gid_t *groups;
+     int ngroups;
+     bool dynamicOwnership;
++    bool mountNamespace;
+     char *baselabel;
+     virSecurityManagerDACChownCallback chownCallback;
+ };
+@@ -238,6 +239,15 @@ virSecurityDACSetDynamicOwnership(virSecurityManagerPtr mgr,
+ }
+ 
+ void
++virSecurityDACSetMountNamespace(virSecurityManagerPtr mgr,
++                                bool mountNamespace)
++{
++    virSecurityDACDataPtr priv = virSecurityManagerGetPrivateData(mgr);
++    priv->mountNamespace = mountNamespace;
++}
++
++
++void
+ virSecurityDACSetChownCallback(virSecurityManagerPtr mgr,
+                                virSecurityManagerDACChownCallback chownCallback)
+ {
+diff --git a/src/security/security_dac.h b/src/security/security_dac.h
+index 846cefbb5..97681c961 100644
+--- a/src/security/security_dac.h
++++ b/src/security/security_dac.h
+@@ -32,6 +32,9 @@ int virSecurityDACSetUserAndGroup(virSecurityManagerPtr mgr,
+ void virSecurityDACSetDynamicOwnership(virSecurityManagerPtr mgr,
+                                        bool dynamic);
+ 
++void virSecurityDACSetMountNamespace(virSecurityManagerPtr mgr,
++                                     bool mountNamespace);
++
+ void virSecurityDACSetChownCallback(virSecurityManagerPtr mgr,
+                                     virSecurityManagerDACChownCallback chownCallback);
+ 
+diff --git a/src/security/security_manager.c b/src/security/security_manager.c
+index 6c777db1e..b2d04d4b9 100644
+--- a/src/security/security_manager.c
++++ b/src/security/security_manager.c
+@@ -146,7 +146,8 @@ virSecurityManagerNewDAC(const char *virtDriver,
+     virSecurityManagerPtr mgr;
+ 
+     virCheckFlags(VIR_SECURITY_MANAGER_NEW_MASK |
+-                  VIR_SECURITY_MANAGER_DYNAMIC_OWNERSHIP, NULL);
++                  VIR_SECURITY_MANAGER_DYNAMIC_OWNERSHIP |
++                  VIR_SECURITY_MANAGER_MOUNT_NAMESPACE, NULL);
+ 
+     mgr = virSecurityManagerNewDriver(&virSecurityDriverDAC,
+                                       virtDriver,
+@@ -161,6 +162,7 @@ virSecurityManagerNewDAC(const char *virtDriver,
+     }
+ 
+     virSecurityDACSetDynamicOwnership(mgr, flags & VIR_SECURITY_MANAGER_DYNAMIC_OWNERSHIP);
++    virSecurityDACSetMountNamespace(mgr, flags & VIR_SECURITY_MANAGER_MOUNT_NAMESPACE);
+     virSecurityDACSetChownCallback(mgr, chownCallback);
+ 
+     return mgr;
+diff --git a/src/security/security_manager.h b/src/security/security_manager.h
+index 238e66cd0..96937a892 100644
+--- a/src/security/security_manager.h
++++ b/src/security/security_manager.h
+@@ -36,6 +36,7 @@ typedef enum {
+     VIR_SECURITY_MANAGER_REQUIRE_CONFINED   = 1 << 2,
+     VIR_SECURITY_MANAGER_PRIVILEGED         = 1 << 3,
+     VIR_SECURITY_MANAGER_DYNAMIC_OWNERSHIP  = 1 << 4,
++    VIR_SECURITY_MANAGER_MOUNT_NAMESPACE    = 1 << 5,
+ } virSecurityManagerNewFlags;
+ 
+ # define VIR_SECURITY_MANAGER_NEW_MASK  \

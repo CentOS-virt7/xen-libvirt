@@ -1,0 +1,113 @@
+From: Michal Privoznik <mprivozn@redhat.com>
+Date: Thu, 27 Apr 2017 16:29:21 +0200
+Subject: [PATCH] qemuDomainBuildNamespace: Move /dev/* mountpoints later
+
+When setting up mount namespace for a qemu domain the following
+steps are executed:
+
+1) get list of mountpoints under /dev/
+2) move them to /var/run/libvirt/qemu/$domName.ext
+3) start constructing new device tree under /var/run/libvirt/qemu/$domName.dev
+4) move the mountpoint of the new device tree to /dev
+5) restore original mountpoints from step 2)
+
+Note the problem with this approach is that if some device in step
+3) requires access to a mountpoint from step 2) it will fail as
+the mountpoint is not there anymore. For instance consider the
+following domain disk configuration:
+
+    <disk type='file' device='disk'>
+      <driver name='qemu' type='raw'/>
+      <source file='/dev/shm/vhostmd0'/>
+      <target dev='vdb' bus='virtio'/>
+      <address type='pci' domain='0x0000' bus='0x00' slot='0x0a' function='0x0'/>
+    </disk>
+
+In this case operation fails as we are unable to create vhostmd0
+in the new device tree because after step 2) there is no /dev/shm
+anymore. Leave aside fact that we shouldn't try to create devices
+living in other mountpoints. That's a separate bug that will be
+addressed later.
+
+Currently, the order described above is rearranged to:
+
+1) get list of mountpoints under /dev/
+2) start constructing new device tree under /var/run/libvirt/qemu/$domName.dev
+3) move them to /var/run/libvirt/qemu/$domName.ext
+4) move the mountpoint of the new device tree to /dev
+5) restore original mountpoints from step 3)
+
+Signed-off-by: Michal Privoznik <mprivozn@redhat.com>
+Reviewed-by: Cedric Bosdonnat <cbosdonnat@suse.com>
+(cherry picked from commit a7cc039dc796f541793955598377807af48341fb)
+(cherry picked from commit 469bf7cb7a44a0798c63e4b5e4682d8e38bce66e)
+---
+ src/qemu/qemu_domain.c | 48 ++++++++++++++++++++++++------------------------
+ 1 file changed, 24 insertions(+), 24 deletions(-)
+
+diff --git a/src/qemu/qemu_domain.c b/src/qemu/qemu_domain.c
+index 4a127cedf..64f18f493 100644
+--- a/src/qemu/qemu_domain.c
++++ b/src/qemu/qemu_domain.c
+@@ -7854,6 +7854,30 @@ qemuDomainBuildNamespace(virQEMUDriverConfigPtr cfg,
+     if (qemuDomainSetupDev(cfg, mgr, vm, devPath) < 0)
+         goto cleanup;
+ 
++    if (qemuDomainSetupAllDisks(cfg, vm, devPath) < 0)
++        goto cleanup;
++
++    if (qemuDomainSetupAllHostdevs(cfg, vm, devPath) < 0)
++        goto cleanup;
++
++    if (qemuDomainSetupAllMemories(cfg, vm, devPath) < 0)
++        goto cleanup;
++
++    if (qemuDomainSetupAllChardevs(cfg, vm, devPath) < 0)
++        goto cleanup;
++
++    if (qemuDomainSetupTPM(cfg, vm, devPath) < 0)
++        goto cleanup;
++
++    if (qemuDomainSetupAllGraphics(cfg, vm, devPath) < 0)
++        goto cleanup;
++
++    if (qemuDomainSetupAllInputs(cfg, vm, devPath) < 0)
++        goto cleanup;
++
++    if (qemuDomainSetupAllRNGs(cfg, vm, devPath) < 0)
++        goto cleanup;
++
+     /* Save some mount points because we want to share them with the host */
+     for (i = 0; i < ndevMountsPath; i++) {
+         struct stat sb;
+@@ -7881,30 +7905,6 @@ qemuDomainBuildNamespace(virQEMUDriverConfigPtr cfg,
+             goto cleanup;
+     }
+ 
+-    if (qemuDomainSetupAllDisks(cfg, vm, devPath) < 0)
+-        goto cleanup;
+-
+-    if (qemuDomainSetupAllHostdevs(cfg, vm, devPath) < 0)
+-        goto cleanup;
+-
+-    if (qemuDomainSetupAllMemories(cfg, vm, devPath) < 0)
+-        goto cleanup;
+-
+-    if (qemuDomainSetupAllChardevs(cfg, vm, devPath) < 0)
+-        goto cleanup;
+-
+-    if (qemuDomainSetupTPM(cfg, vm, devPath) < 0)
+-        goto cleanup;
+-
+-    if (qemuDomainSetupAllGraphics(cfg, vm, devPath) < 0)
+-        goto cleanup;
+-
+-    if (qemuDomainSetupAllInputs(cfg, vm, devPath) < 0)
+-        goto cleanup;
+-
+-    if (qemuDomainSetupAllRNGs(cfg, vm, devPath) < 0)
+-        goto cleanup;
+-
+     if (virFileMoveMount(devPath, "/dev") < 0)
+         goto cleanup;
+ 

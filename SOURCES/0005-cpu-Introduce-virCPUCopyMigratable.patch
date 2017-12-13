@@ -1,0 +1,145 @@
+From: Jiri Denemark <jdenemar@redhat.com>
+Date: Wed, 29 Mar 2017 14:45:44 +0200
+Subject: [PATCH] cpu: Introduce virCPUCopyMigratable
+
+This new internal API makes a copy of virCPUDef while removing all
+features which would block migration. It uses cpu_map.xml as a database
+of such features, which should only be used as a fallback when we cannot
+get the data from a hypervisor. The main goal of this API is to decouple
+this filtering from virCPUUpdate so that the hypervisor driver can
+filter the features according to the hypervisor.
+
+Signed-off-by: Jiri Denemark <jdenemar@redhat.com>
+(cherry picked from commit 05e91c79f19e0be96526098d58a3498dac3f8529)
+---
+ src/cpu/cpu.c            | 31 +++++++++++++++++++++++++++++++
+ src/cpu/cpu.h            |  8 ++++++++
+ src/cpu/cpu_x86.c        | 25 +++++++++++++++++++++++++
+ src/libvirt_private.syms |  1 +
+ 4 files changed, 65 insertions(+)
+
+diff --git a/src/cpu/cpu.c b/src/cpu/cpu.c
+index 93647a2ed..8a407ac18 100644
+--- a/src/cpu/cpu.c
++++ b/src/cpu/cpu.c
+@@ -1130,3 +1130,34 @@ virCPUExpandFeatures(virArch arch,
+     VIR_DEBUG("nfeatures=%zu", cpu->nfeatures);
+     return 0;
+ }
++
++
++/**
++ * virCPUCopyMigratable:
++ *
++ * @arch: CPU architecture
++ * @cpu: CPU definition to be copied
++ *
++ * Makes a copy of @cpu with all features which would block migration removed.
++ * If this doesn't make sense for a given architecture, the function returns a
++ * plain copy of @cpu (i.e., a copy with no features removed).
++ *
++ * Returns the copy of the CPU or NULL on error.
++ */
++virCPUDefPtr
++virCPUCopyMigratable(virArch arch,
++                     virCPUDefPtr cpu)
++{
++    struct cpuArchDriver *driver;
++
++    VIR_DEBUG("arch=%s, cpu=%p, model=%s",
++              virArchToString(arch), cpu, NULLSTR(cpu->model));
++
++    if (!(driver = cpuGetSubDriver(arch)))
++        return NULL;
++
++    if (driver->copyMigratable)
++        return driver->copyMigratable(cpu);
++    else
++        return virCPUDefCopy(cpu);
++}
+diff --git a/src/cpu/cpu.h b/src/cpu/cpu.h
+index 8c238ad55..352445c40 100644
+--- a/src/cpu/cpu.h
++++ b/src/cpu/cpu.h
+@@ -118,6 +118,9 @@ typedef int
+ typedef int
+ (*virCPUArchExpandFeatures)(virCPUDefPtr cpu);
+ 
++typedef virCPUDefPtr
++(*virCPUArchCopyMigratable)(virCPUDefPtr cpu);
++
+ struct cpuArchDriver {
+     const char *name;
+     const virArch *arch;
+@@ -138,6 +141,7 @@ struct cpuArchDriver {
+     virCPUArchTranslate translate;
+     virCPUArchConvertLegacy convertLegacy;
+     virCPUArchExpandFeatures expandFeatures;
++    virCPUArchCopyMigratable copyMigratable;
+ };
+ 
+ 
+@@ -254,6 +258,10 @@ int
+ virCPUExpandFeatures(virArch arch,
+                      virCPUDefPtr cpu);
+ 
++virCPUDefPtr
++virCPUCopyMigratable(virArch arch,
++                     virCPUDefPtr cpu);
++
+ /* virCPUDataFormat and virCPUDataParse are implemented for unit tests only and
+  * have no real-life usage
+  */
+diff --git a/src/cpu/cpu_x86.c b/src/cpu/cpu_x86.c
+index 48648a7f4..a771b251e 100644
+--- a/src/cpu/cpu_x86.c
++++ b/src/cpu/cpu_x86.c
+@@ -2903,6 +2903,30 @@ virCPUx86ExpandFeatures(virCPUDefPtr cpu)
+ }
+ 
+ 
++static virCPUDefPtr
++virCPUx86CopyMigratable(virCPUDefPtr cpu)
++{
++    virCPUDefPtr copy;
++    virCPUx86MapPtr map;
++
++    if (!(map = virCPUx86GetMap()))
++        return NULL;
++
++    if (!(copy = virCPUDefCopyWithoutModel(cpu)))
++        return NULL;
++
++    if (virCPUDefCopyModelFilter(copy, cpu, false,
++                                 x86FeatureIsMigratable, map) < 0)
++        goto error;
++
++    return copy;
++
++ error:
++    virCPUDefFree(copy);
++    return NULL;
++}
++
++
+ int
+ virCPUx86DataAddCPUID(virCPUDataPtr cpuData,
+                       const virCPUx86CPUID *cpuid)
+@@ -2978,4 +3002,5 @@ struct cpuArchDriver cpuDriverX86 = {
+     .getModels  = virCPUx86GetModels,
+     .translate  = virCPUx86Translate,
+     .expandFeatures = virCPUx86ExpandFeatures,
++    .copyMigratable = virCPUx86CopyMigratable,
+ };
+diff --git a/src/libvirt_private.syms b/src/libvirt_private.syms
+index b551cb86a..dc6db3b28 100644
+--- a/src/libvirt_private.syms
++++ b/src/libvirt_private.syms
+@@ -1016,6 +1016,7 @@ virCPUCheckFeature;
+ virCPUCompare;
+ virCPUCompareXML;
+ virCPUConvertLegacy;
++virCPUCopyMigratable;
+ virCPUDataCheckFeature;
+ virCPUDataFormat;
+ virCPUDataFree;

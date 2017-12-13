@@ -1,0 +1,63 @@
+From: Michal Privoznik <mprivozn@redhat.com>
+Date: Mon, 31 Jul 2017 16:55:58 +0200
+Subject: [PATCH] qemu: Honour <on_reboot/>
+
+https://bugzilla.redhat.com/show_bug.cgi?id=1476866
+
+For some reason, we completely ignore <on_reboot/> setting for
+domains. The implementation is simply not there. It never was.
+
+Signed-off-by: Michal Privoznik <mprivozn@redhat.com>
+(cherry picked from commit 3ee9bdbe351c0b80d4c469571ef31df3f1b148ea)
+---
+ src/qemu/qemu_process.c | 27 ++++++++++++++++++++++++---
+ 1 file changed, 24 insertions(+), 3 deletions(-)
+
+diff --git a/src/qemu/qemu_process.c b/src/qemu/qemu_process.c
+index 992a7174b..7588212ba 100644
+--- a/src/qemu/qemu_process.c
++++ b/src/qemu/qemu_process.c
+@@ -487,6 +487,7 @@ qemuProcessHandleReset(qemuMonitorPtr mon ATTRIBUTE_UNUSED,
+     virObjectEventPtr event;
+     qemuDomainObjPrivatePtr priv;
+     virQEMUDriverConfigPtr cfg = virQEMUDriverGetConfig(driver);
++    int ret = -1;
+ 
+     virObjectLock(vm);
+ 
+@@ -498,12 +499,32 @@ qemuProcessHandleReset(qemuMonitorPtr mon ATTRIBUTE_UNUSED,
+     if (virDomainSaveStatus(driver->xmlopt, cfg->stateDir, vm, driver->caps) < 0)
+         VIR_WARN("Failed to save status on vm %s", vm->def->name);
+ 
+-    virObjectUnlock(vm);
++    if (vm->def->onReboot == VIR_DOMAIN_LIFECYCLE_DESTROY ||
++        vm->def->onReboot == VIR_DOMAIN_LIFECYCLE_PRESERVE) {
+ 
+-    qemuDomainEventQueue(driver, event);
++        if (qemuDomainObjBeginJob(driver, vm, QEMU_JOB_MODIFY) < 0)
++            goto cleanup;
++
++        if (!virDomainObjIsActive(vm)) {
++            VIR_DEBUG("Ignoring RESET event from inactive domain %s",
++                      vm->def->name);
++            goto endjob;
++        }
++
++        qemuProcessStop(driver, vm, VIR_DOMAIN_SHUTOFF_DESTROYED,
++                        QEMU_ASYNC_JOB_NONE, 0);
++        virDomainAuditStop(vm, "destroyed");
++        qemuDomainRemoveInactive(driver, vm);
++     endjob:
++        qemuDomainObjEndJob(driver, vm);
++    }
+ 
++    ret = 0;
++ cleanup:
++    virObjectUnlock(vm);
++    qemuDomainEventQueue(driver, event);
+     virObjectUnref(cfg);
+-    return 0;
++    return ret;
+ }
+ 
+ 
