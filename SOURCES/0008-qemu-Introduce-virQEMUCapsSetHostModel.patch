@@ -1,0 +1,47 @@
+From: Jiri Denemark <jdenemar@redhat.com>
+Date: Fri, 7 Apr 2017 17:03:38 +0200
+Subject: [PATCH] qemu: Introduce virQEMUCapsSetHostModel
+
+A simple helper as a complement to virQEMUCapsGetHostModel.
+
+Signed-off-by: Jiri Denemark <jdenemar@redhat.com>
+(cherry picked from commit bffc3b9fe501ff122ad81ddf42ecdb69f70ff70a)
+---
+ src/qemu/qemu_capabilities.c | 17 +++++++++++++----
+ 1 file changed, 13 insertions(+), 4 deletions(-)
+
+diff --git a/src/qemu/qemu_capabilities.c b/src/qemu/qemu_capabilities.c
+index b8e4e47b6..f6020b86d 100644
+--- a/src/qemu/qemu_capabilities.c
++++ b/src/qemu/qemu_capabilities.c
+@@ -2419,6 +2419,18 @@ virQEMUCapsGetHostModel(virQEMUCapsPtr qemuCaps,
+ }
+ 
+ 
++static void
++virQEMUCapsSetHostModel(virQEMUCapsPtr qemuCaps,
++                        virDomainVirtType type,
++                        virCPUDefPtr cpu)
++{
++    if (type == VIR_DOMAIN_VIRT_KVM)
++        qemuCaps->kvmCPUModel = cpu;
++    else
++        qemuCaps->tcgCPUModel = cpu;
++}
++
++
+ bool
+ virQEMUCapsIsCPUModeSupported(virQEMUCapsPtr qemuCaps,
+                               virCapsPtr caps,
+@@ -3295,10 +3307,7 @@ virQEMUCapsInitHostCPUModel(virQEMUCapsPtr qemuCaps,
+             goto error;
+     }
+ 
+-    if (type == VIR_DOMAIN_VIRT_KVM)
+-        qemuCaps->kvmCPUModel = cpu;
+-    else
+-        qemuCaps->tcgCPUModel = cpu;
++    virQEMUCapsSetHostModel(qemuCaps, type, cpu);
+ 
+  cleanup:
+     virCPUDefFree(hostCPU);

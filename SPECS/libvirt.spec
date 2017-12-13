@@ -71,6 +71,13 @@
 %define with_storage_gluster 0%{!?_without_storage_gluster:1}
 %define with_numactl          0%{!?_without_numactl:1}
 
+# F25+ has zfs-fuse
+%if 0%{?fedora} >= 25
+    %define with_storage_zfs      0%{!?_without_storage_zfs:1}
+%else
+    %define with_storage_zfs      0
+%endif
+
 # A few optional bits off by default, we enable later
 %define with_fuse          0%{!?_without_fuse:0}
 %define with_cgconfig      0%{!?_without_cgconfig:0}
@@ -114,6 +121,12 @@
         %define with_storage_rbd 0
     %endif
 %endif
+
+# zfs-fuse is not available on some architectures
+%ifarch s390 s390x aarch64
+    %define with_storage_zfs 0
+%endif
+
 
 # RHEL doesn't ship OpenVZ, VBox, UML, PowerHypervisor,
 # VMware, libxenserver (xenapi), libxenlight (Xen 4.1 and newer),
@@ -227,7 +240,7 @@
 Summary: Library providing a simple virtualization API
 Name: libvirt
 Version: 3.2.1
-Release: 4%{?dist}%{?extra_release}
+Release: 6%{?dist}%{?extra_release}
 License: LGPLv2+
 Group: Development/Libraries
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root
@@ -242,27 +255,38 @@ Source: http://libvirt.org/sources/%{?mainturl}libvirt-%{version}.tar.xz
 Patch0001: 0001-tests-Check-default-GIC-version-for-aarch64-virt-TCG.patch
 Patch0002: 0002-qemu-Use-GICv2-for-aarch64-virt-TCG-guests.patch
 Patch0003: 0003-gic-Remove-VIR_GIC_VERSION_DEFAULT.patch
-# Don't run libvirtd in live environment, to avoid network collision (bz
-# #1146232)
-Patch0004: 0004-daemon-Don-t-run-if-in-a-Fedora-live-VM.patch
 # Fix resuming qemu VMs suspended before libvirt 3.2.0
-Patch0005: 0005-Revert-qemu-propagate-bridge-MTU-into-qemu-host_mtu-.patch
+Patch0004: 0004-Revert-qemu-propagate-bridge-MTU-into-qemu-host_mtu-.patch
 # Fix issues with AMD CPU models, and some others
-Patch0006: 0006-cpu-Introduce-virCPUCopyMigratable.patch
-Patch0007: 0007-qemu-Move-common-code-in-virQEMUCapsInitCPUModel-one.patch
-Patch0008: 0008-qemu-Add-migratable-parameter-to-virQEMUCapsInitCPUM.patch
-Patch0009: 0009-qemu-Introduce-virQEMUCapsSetHostModel.patch
-Patch0010: 0010-qemu-Move-qemuCaps-CPU-data-copying-into-a-separate-.patch
-Patch0011: 0011-qemu-Introduce-virQEMUCapsHostCPUDataClear.patch
-Patch0012: 0012-qemu-Move-qemuCaps-host-CPU-data-in-a-struct.patch
-Patch0013: 0013-qemu-Prepare-qemuCaps-for-multiple-host-CPU-defs.patch
-Patch0014: 0014-qemu-Pass-migratable-host-CPU-model-to-virCPUUpdate.patch
-Patch0015: 0015-cpu-Drop-feature-filtering-from-virCPUUpdate.patch
-Patch0016: 0016-cpu-Introduce-virCPUGetHostIsSupported.patch
-Patch0017: 0017-qemu-Use-more-data-for-comparing-CPUs.patch
+Patch0005: 0005-cpu-Introduce-virCPUCopyMigratable.patch
+Patch0006: 0006-qemu-Move-common-code-in-virQEMUCapsInitCPUModel-one.patch
+Patch0007: 0007-qemu-Add-migratable-parameter-to-virQEMUCapsInitCPUM.patch
+Patch0008: 0008-qemu-Introduce-virQEMUCapsSetHostModel.patch
+Patch0009: 0009-qemu-Move-qemuCaps-CPU-data-copying-into-a-separate-.patch
+Patch0010: 0010-qemu-Introduce-virQEMUCapsHostCPUDataClear.patch
+Patch0011: 0011-qemu-Move-qemuCaps-host-CPU-data-in-a-struct.patch
+Patch0012: 0012-qemu-Prepare-qemuCaps-for-multiple-host-CPU-defs.patch
+Patch0013: 0013-qemu-Pass-migratable-host-CPU-model-to-virCPUUpdate.patch
+Patch0014: 0014-cpu-Drop-feature-filtering-from-virCPUUpdate.patch
+Patch0015: 0015-cpu-Introduce-virCPUGetHostIsSupported.patch
+Patch0016: 0016-qemu-Use-more-data-for-comparing-CPUs.patch
 
-# Fix build on CentOS 6
-Patch1001: 1001-libxl-Avoid-a-variable-named-stat.patch
+# Enable ZFS storage driver (bz #1471912)
+Patch0101: 0101-spec-Add-support-for-building-the-zfs-storage-driver.patch
+# Don't use cgroup mount points from /proc/mounts that are hidden (bz
+# #1470593)
+Patch0102: 0102-Avoid-hidden-cgroup-mount-points.patch
+# disk driver name=... should be optional (bz #1473091)
+Patch0103: 0103-docs-schema-make-disk-driver-name-attribute-optional.patch
+# Fix TPM2 passthrough (bz #1486240)
+Patch0104: 0104-tpm-Use-dev-null-for-cancel-path-if-none-was-found.patch
+# Fix spice GL qemu:///system rendernode permissions (bz #1460804)
+Patch0105: 0105-security-add-MANAGER_MOUNT_NAMESPACE-flag.patch
+Patch0106: 0106-security-dac-relabel-spice-rendernode.patch
+# Fix on_reboot=destroy setting (bz #1476866)
+Patch0107: 0107-qemu-Honour-on_reboot.patch
+# Fix disk images in /dev/shm (bz #1482146)
+Patch0108: 0108-qemuDomainBuildNamespace-Move-dev-mountpoints-later.patch
 
 Requires: libvirt-daemon = %{version}-%{release}
 Requires: libvirt-daemon-config-network = %{version}-%{release}
@@ -398,6 +422,12 @@ BuildRequires: glusterfs-devel >= 3.4.1
 %endif
 %if %{with_storage_sheepdog}
 BuildRequires: sheepdog
+%endif
+%if %{with_storage_zfs}
+# Support any conforming implementation of zfs. On stock Fedora
+# this is zfs-fuse, but could be zfsonlinux upstream RPMs
+BuildRequires: /sbin/zfs
+BuildRequires: /sbin/zpool
 %endif
 %if %{with_numactl}
 # For QEMU/LXC numa info
@@ -731,6 +761,21 @@ sheepdog volumes using.
 %endif
 
 
+%if %{with_storage_zfs}
+%package daemon-driver-storage-zfs
+Summary: Storage driver plugin for ZFS
+Group: Development/Libraries
+Requires: libvirt-daemon-driver-storage-core = %{version}-%{release}
+# Support any conforming implementation of zfs
+Requires: /sbin/zfs
+Requires: /sbin/zpool
+
+%description daemon-driver-storage-zfs
+The storage driver backend adding implementation of the storage APIs for
+ZFS volumes.
+%endif
+
+
 %package daemon-driver-storage
 Summary: Storage driver plugin including all backends for the libvirtd daemon
 Group: Development/Libraries
@@ -748,6 +793,9 @@ Requires: libvirt-daemon-driver-storage-rbd = %{version}-%{release}
 %endif
 %if %{with_storage_sheepdog}
 Requires: libvirt-daemon-driver-storage-sheepdog = %{version}-%{release}
+%endif
+%if %{with_storage_zfs}
+Requires: libvirt-daemon-driver-storage-zfs = %{version}-%{release}
 %endif
 
 %description daemon-driver-storage
@@ -1206,6 +1254,12 @@ rm -rf .git
     %define arg_storage_gluster --without-storage-gluster
 %endif
 
+%if %{with_storage_zfs}
+    %define arg_storage_zfs --with-storage-zfs
+%else
+    %define arg_storage_zfs --without-storage-zfs
+%endif
+
 %if %{with_numactl}
     %define arg_numactl --with-numactl
 %else
@@ -1314,7 +1368,7 @@ rm -f po/stamp-po
            %{?arg_storage_rbd} \
            %{?arg_storage_sheepdog} \
            %{?arg_storage_gluster} \
-           --without-storage-zfs \
+           %{?arg_storage_zfs} \
            --without-storage-vstorage \
            %{?arg_numactl} \
            %{?arg_numad} \
@@ -1876,6 +1930,11 @@ exit 0
 %{_libdir}/%{name}/storage-backend/libvirt_storage_backend_sheepdog.so
 %endif
 
+%if %{with_storage_zfs}
+%files daemon-driver-storage-zfs
+%{_libdir}/%{name}/storage-backend/libvirt_storage_backend_zfs.so
+%endif
+
 %if %{with_qemu}
 %files daemon-driver-qemu
 %dir %attr(0700, root, root) %{_sysconfdir}/libvirt/qemu/
@@ -2095,6 +2154,18 @@ exit 0
 
 
 %changelog
+* Fri Sep 15 2017 Cole Robinson <crobinso@redhat.com> - 3.2.1-6
+- Fix TPM2 passthrough (bz #1486240)
+- Fix spice GL qemu:///system rendernode permissions (bz #1460804)
+- Fix on_reboot=destroy setting (bz #1476866)
+- Fix disk images in /dev/shm (bz #1482146)
+
+* Fri Aug 04 2017 Cole Robinson <crobinso@redhat.com> - 3.2.1-5
+- Enable ZFS storage driver (bz #1471912)
+- Don't use cgroup mount points from /proc/mounts that are hidden (bz
+  #1470593)
+- disk driver name=... should be optional (bz #1473091)
+
 * Wed Jul 12 2017 Cole Robinson <crobinso@redhat.com> - 3.2.1-4
 - Fix resuming qemu VMs suspended before libvirt 3.2.0
 - Fix issues with AMD CPU models, and some others

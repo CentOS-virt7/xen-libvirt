@@ -1,0 +1,150 @@
+From: Juan Hernandez <jhernand@redhat.com>
+Date: Thu, 6 Jul 2017 17:03:31 +0200
+Subject: [PATCH] Avoid hidden cgroup mount points
+
+Currently the scan of the /proc/mounts file used to find cgroup mount
+points doesn't take into account that mount points may hidden by other
+mount points. For, example in certain Kubernetes environments the
+/proc/mounts contains the following lines:
+
+  cgroup /sys/fs/cgroup/net_prio,net_cls cgroup ...
+  tmpfs /sys/fs/cgroup tmpfs ...
+  cgroup /sys/fs/cgroup/net_cls,net_prio cgroup ...
+
+In this particular environment the first mount point is hidden by the
+second one. The correct mount point is the third one, but libvirt will
+never process it because it only checks the first mount point for each
+controller (net_cls in this case). So libvirt will try to use the first
+mount point, which doesn't actually exist, and the complete detection
+process will fail.
+
+To avoid that issue this patch changes the virCgroupDetectMountsFromFile
+function so that when there are duplicates it takes the information from
+the last line in /proc/mounts. This requires removing the previous
+explicit condition to skip duplicates, and adding code to free the
+memory used by the processing of duplicated lines.
+
+Related-To: https://bugzilla.redhat.com/1468214
+Related-To: https://github.com/kubevirt/libvirt/issues/4
+Signed-off-by: Juan Hernandez <jhernand@redhat.com>
+(cherry picked from commit dacd160d7479e0ec2d8a63f102145fd30636a1c8)
+---
+ src/util/vircgroup.c                | 23 ++++++++++++++---------
+ tests/vircgroupdata/kubevirt.mounts | 25 +++++++++++++++++++++++++
+ tests/vircgroupdata/kubevirt.parsed | 10 ++++++++++
+ tests/vircgrouptest.c               |  1 +
+ 4 files changed, 50 insertions(+), 9 deletions(-)
+ create mode 100644 tests/vircgroupdata/kubevirt.mounts
+ create mode 100644 tests/vircgroupdata/kubevirt.parsed
+
+diff --git a/src/util/vircgroup.c b/src/util/vircgroup.c
+index 5aa1db5b1..a53908fc9 100644
+--- a/src/util/vircgroup.c
++++ b/src/util/vircgroup.c
+@@ -397,6 +397,7 @@ virCgroupDetectMountsFromFile(virCgroupPtr group,
+             const char *typestr = virCgroupControllerTypeToString(i);
+             int typelen = strlen(typestr);
+             char *tmp = entry.mnt_opts;
++            struct virCgroupController *controller = &group->controllers[i];
+             while (tmp) {
+                 char *next = strchr(tmp, ',');
+                 int len;
+@@ -406,18 +407,22 @@ virCgroupDetectMountsFromFile(virCgroupPtr group,
+                 } else {
+                     len = strlen(tmp);
+                 }
+-                /* NB, the same controller can appear >1 time in mount list
+-                 * due to bind mounts from one location to another. Pick the
+-                 * first entry only
+-                 */
+-                if (typelen == len && STREQLEN(typestr, tmp, len) &&
+-                    !group->controllers[i].mountPoint) {
++
++                if (typelen == len && STREQLEN(typestr, tmp, len)) {
+                     char *linksrc;
+                     struct stat sb;
+                     char *tmp2;
+ 
+-                    if (VIR_STRDUP(group->controllers[i].mountPoint,
+-                                   entry.mnt_dir) < 0)
++                    /* Note that the lines in /proc/mounts have the same
++                     * order than the mount operations, and that there may
++                     * be duplicates due to bind mounts. This means
++                     * that the same mount point may be processed more than
++                     * once. We need to save the results of the last one,
++                     * and we need to be careful to release the memory used
++                     * by previous processing. */
++                    VIR_FREE(controller->mountPoint);
++                    VIR_FREE(controller->linkPoint);
++                    if (VIR_STRDUP(controller->mountPoint, entry.mnt_dir) < 0)
+                         goto error;
+ 
+                     tmp2 = strrchr(entry.mnt_dir, '/');
+@@ -453,7 +458,7 @@ virCgroupDetectMountsFromFile(virCgroupPtr group,
+                                 VIR_WARN("Expecting a symlink at %s for controller %s",
+                                          linksrc, typestr);
+                             } else {
+-                                group->controllers[i].linkPoint = linksrc;
++                                controller->linkPoint = linksrc;
+                             }
+                         }
+                     }
+diff --git a/tests/vircgroupdata/kubevirt.mounts b/tests/vircgroupdata/kubevirt.mounts
+new file mode 100644
+index 000000000..ca036196b
+--- /dev/null
++++ b/tests/vircgroupdata/kubevirt.mounts
+@@ -0,0 +1,25 @@
++rootfs / rootfs rw 0 0
++proc /proc proc rw,nosuid,nodev,noexec,relatime 0 0
++udev /dev devtmpfs rw,nosuid,relatime,size=10240k,nr_inodes=1006404,mode=755 0 0
++devpts /dev/pts devpts rw,relatime,gid=5,mode=620,ptmxmode=000 0 0
++sysfs /sys sysfs rw,nosuid,nodev,noexec,relatime 0 0
++/dev/sda1 / ext4 rw,noatime,data=ordered 0 0
++tmpfs /run tmpfs rw,nodev,relatime,size=812296k,mode=755 0 0
++mqueue /dev/mqueue mqueue rw,nosuid,nodev,noexec,relatime 0 0
++shm /dev/shm tmpfs rw,nosuid,nodev,noexec,relatime 0 0
++debugfs /sys/kernel/debug debugfs rw,nosuid,nodev,noexec,relatime 0 0
++cgroup_root /sys/fs/cgroup tmpfs rw,nosuid,nodev,noexec,relatime,size=10240k,mode=755 0 0
++openrc /sys/fs/cgroup/openrc cgroup rw,nosuid,nodev,noexec,relatime,release_agent=/lib64/rc/sh/cgroup-release-agent.sh,name=openrc 0 0
++cpuset /some/random/location/cpuset cgroup rw,nosuid,nodev,noexec,relatime,cpuset 0 0
++cpuset /sys/fs/cgroup/cpuset cgroup rw,nosuid,nodev,noexec,relatime,cpuset 0 0
++cpu /sys/fs/cgroup/cpu cgroup rw,nosuid,nodev,noexec,relatime,cpu 0 0
++cpuacct /some/random/location/cpuset cgroup rw,nosuid,nodev,noexec,relatime,cpuacct 0 0
++cpuacct /sys/fs/cgroup/cpuacct cgroup rw,nosuid,nodev,noexec,relatime,cpuacct 0 0
++memory /sys/fs/cgroup/memory cgroup rw,nosuid,nodev,noexec,relatime,memory 0 0
++devices /sys/fs/cgroup/devices cgroup rw,nosuid,nodev,noexec,relatime,devices 0 0
++freezer /sys/fs/cgroup/freezer cgroup rw,nosuid,nodev,noexec,relatime,freezer 0 0
++blkio /sys/fs/cgroup/blkio cgroup rw,nosuid,nodev,noexec,relatime,blkio 0 0
++perf_event /sys/fs/cgroup/perf_event cgroup rw,nosuid,nodev,noexec,relatime,perf_event 0 0
++hugetlb /sys/fs/cgroup/hugetlb cgroup rw,nosuid,nodev,noexec,relatime,hugetlb 0 0
++binfmt_misc /proc/sys/fs/binfmt_misc binfmt_misc rw,nosuid,nodev,noexec,relatime 0 0
++freezer /some/random/location/freezer cgroup rw,nosuid,nodev,noexec,relatime,freezer 0 0
+diff --git a/tests/vircgroupdata/kubevirt.parsed b/tests/vircgroupdata/kubevirt.parsed
+new file mode 100644
+index 000000000..694870723
+--- /dev/null
++++ b/tests/vircgroupdata/kubevirt.parsed
+@@ -0,0 +1,10 @@
++cpu          /sys/fs/cgroup/cpu
++cpuacct      /sys/fs/cgroup/cpuacct
++cpuset       /sys/fs/cgroup/cpuset
++memory       /sys/fs/cgroup/memory
++devices      /sys/fs/cgroup/devices
++freezer      /some/random/location/freezer
++blkio        /sys/fs/cgroup/blkio
++net_cls      <null>
++perf_event   /sys/fs/cgroup/perf_event
++name=systemd <null>
+diff --git a/tests/vircgrouptest.c b/tests/vircgrouptest.c
+index f55ef74a1..cf0315f16 100644
+--- a/tests/vircgrouptest.c
++++ b/tests/vircgrouptest.c
+@@ -885,6 +885,7 @@ mymain(void)
+     DETECT_MOUNTS("cgroups3");
+     DETECT_MOUNTS("all-in-one");
+     DETECT_MOUNTS("no-cgroups");
++    DETECT_MOUNTS("kubevirt");
+ 
+     if (virTestRun("New cgroup for self", testCgroupNewForSelf, NULL) < 0)
+         ret = -1;

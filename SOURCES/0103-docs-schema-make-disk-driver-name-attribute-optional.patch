@@ -1,0 +1,53 @@
+From: Jim Fehlig <jfehlig@suse.com>
+Date: Tue, 18 Jul 2017 10:20:35 -0600
+Subject: [PATCH] docs: schema: make disk driver name attribute optional
+
+/domain/devices/disk/driver/@name is not a required or mandatory
+attribute according to formatdomain, and indeed it was agreed on
+IRC that the attribute is "optional for input, recommended (but
+not required) for output". Currently the schema requires the
+attribute, causing virt-xml-validate to fail on disk config where
+the driver name is not explicitly specified. E.g.
+
+# cat test.xml | grep -A 5 cdrom
+    <disk type='file' device='cdrom'>
+      <driver type='raw'/>
+      <target dev='hdb' bus='ide'/>
+      <readonly/>
+      <address type='drive' controller='0' bus='0' target='0' unit='1'/>
+    </disk>
+
+# virt-xml-validate test.xml
+Relax-NG validity error : Extra element devices in interleave
+test.xml:21: element devices: Relax-NG validity error : Element domain failed to validate content
+test.xml fails to validate
+
+Relaxing the name attribute to be optional fixes the validation
+
+# virt-xml-validate test.xml
+test.xml validates
+
+(cherry picked from commit b494e09d058f09b48d0fd8855edd557101294671)
+---
+ docs/schemas/domaincommon.rng | 8 +++++---
+ 1 file changed, 5 insertions(+), 3 deletions(-)
+
+diff --git a/docs/schemas/domaincommon.rng b/docs/schemas/domaincommon.rng
+index edc225fe5..dfc7e2470 100644
+--- a/docs/schemas/domaincommon.rng
++++ b/docs/schemas/domaincommon.rng
+@@ -1720,9 +1720,11 @@
+     </element>
+   </define>
+   <define name="driverFormat">
+-    <attribute name="name">
+-      <ref name="genericName"/>
+-    </attribute>
++    <optional>
++      <attribute name="name">
++        <ref name="genericName"/>
++      </attribute>
++    </optional>
+     <optional>
+       <attribute name='type'>
+         <choice>

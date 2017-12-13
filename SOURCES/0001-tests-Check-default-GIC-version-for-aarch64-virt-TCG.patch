@@ -1,0 +1,122 @@
+From: Andrea Bolognani <abologna@redhat.com>
+Date: Fri, 12 May 2017 14:05:55 +0200
+Subject: [PATCH] tests: Check default GIC version for aarch64/virt TCG guests
+
+Signed-off-by: Andrea Bolognani <abologna@redhat.com>
+(cherry picked from commit b24eaf6210ebaf5dc8d29621063873c8419c517e)
+---
+ .../qemuxml2argv-aarch64-gic-none-tcg.args         | 19 ++++++++++++++++
+ .../qemuxml2argv-aarch64-gic-none-tcg.xml          | 17 +++++++++++++++
+ tests/qemuxml2argvtest.c                           |  3 +++
+ .../qemuxml2xmlout-aarch64-gic-none-tcg.xml        | 25 ++++++++++++++++++++++
+ tests/qemuxml2xmltest.c                            |  1 +
+ 5 files changed, 65 insertions(+)
+ create mode 100644 tests/qemuxml2argvdata/qemuxml2argv-aarch64-gic-none-tcg.args
+ create mode 100644 tests/qemuxml2argvdata/qemuxml2argv-aarch64-gic-none-tcg.xml
+ create mode 100644 tests/qemuxml2xmloutdata/qemuxml2xmlout-aarch64-gic-none-tcg.xml
+
+diff --git a/tests/qemuxml2argvdata/qemuxml2argv-aarch64-gic-none-tcg.args b/tests/qemuxml2argvdata/qemuxml2argv-aarch64-gic-none-tcg.args
+new file mode 100644
+index 000000000..975a01481
+--- /dev/null
++++ b/tests/qemuxml2argvdata/qemuxml2argv-aarch64-gic-none-tcg.args
+@@ -0,0 +1,19 @@
++LC_ALL=C \
++PATH=/bin \
++HOME=/home/test \
++USER=test \
++LOGNAME=test \
++QEMU_AUDIO_DRV=none \
++/usr/bin/qemu-system-aarch64 \
++-name guest \
++-S \
++-machine virt,accel=tcg,gic-version=3 \
++-cpu cortex-a57 \
++-m 1024 \
++-smp 1,sockets=1,cores=1,threads=1 \
++-uuid 6ba410c5-1e5c-4d57-bee7-2228e7ffa32f \
++-nographic \
++-nodefaults \
++-monitor unix:/tmp/lib/domain--1-guest/monitor.sock,server,nowait \
++-no-acpi \
++-boot c
+diff --git a/tests/qemuxml2argvdata/qemuxml2argv-aarch64-gic-none-tcg.xml b/tests/qemuxml2argvdata/qemuxml2argv-aarch64-gic-none-tcg.xml
+new file mode 100644
+index 000000000..0aa33dbec
+--- /dev/null
++++ b/tests/qemuxml2argvdata/qemuxml2argv-aarch64-gic-none-tcg.xml
+@@ -0,0 +1,17 @@
++<domain type='qemu'>
++  <name>guest</name>
++  <uuid>6ba410c5-1e5c-4d57-bee7-2228e7ffa32f</uuid>
++  <memory unit='KiB'>1048576</memory>
++  <vcpu placement='static'>1</vcpu>
++  <os>
++    <type arch='aarch64' machine='virt'>hvm</type>
++    <boot dev='hd'/>
++  </os>
++  <cpu mode='custom'>
++    <model>cortex-a57</model>
++  </cpu>
++  <devices>
++    <emulator>/usr/bin/qemu-system-aarch64</emulator>
++    <memballoon model='none'/>
++  </devices>
++</domain>
+diff --git a/tests/qemuxml2argvtest.c b/tests/qemuxml2argvtest.c
+index cc4fb91cd..362b140ac 100644
+--- a/tests/qemuxml2argvtest.c
++++ b/tests/qemuxml2argvtest.c
+@@ -2250,6 +2250,9 @@ mymain(void)
+     DO_TEST_GIC("aarch64-gic-none-both", GIC_BOTH,
+             QEMU_CAPS_KVM, QEMU_CAPS_MACHINE_OPT,
+             QEMU_CAPS_MACH_VIRT_GIC_VERSION);
++    DO_TEST_GIC("aarch64-gic-none-tcg", GIC_BOTH,
++            QEMU_CAPS_MACHINE_OPT,
++            QEMU_CAPS_MACH_VIRT_GIC_VERSION);
+     DO_TEST_GIC("aarch64-gic-default", GIC_NONE,
+             QEMU_CAPS_KVM, QEMU_CAPS_MACHINE_OPT);
+     DO_TEST_GIC("aarch64-gic-default", GIC_NONE,
+diff --git a/tests/qemuxml2xmloutdata/qemuxml2xmlout-aarch64-gic-none-tcg.xml b/tests/qemuxml2xmloutdata/qemuxml2xmlout-aarch64-gic-none-tcg.xml
+new file mode 100644
+index 000000000..69510e281
+--- /dev/null
++++ b/tests/qemuxml2xmloutdata/qemuxml2xmlout-aarch64-gic-none-tcg.xml
+@@ -0,0 +1,25 @@
++<domain type='qemu'>
++  <name>guest</name>
++  <uuid>6ba410c5-1e5c-4d57-bee7-2228e7ffa32f</uuid>
++  <memory unit='KiB'>1048576</memory>
++  <currentMemory unit='KiB'>1048576</currentMemory>
++  <vcpu placement='static'>1</vcpu>
++  <os>
++    <type arch='aarch64' machine='virt'>hvm</type>
++    <boot dev='hd'/>
++  </os>
++  <features>
++    <gic version='3'/>
++  </features>
++  <cpu mode='custom' match='exact' check='none'>
++    <model fallback='allow'>cortex-a57</model>
++  </cpu>
++  <clock offset='utc'/>
++  <on_poweroff>destroy</on_poweroff>
++  <on_reboot>restart</on_reboot>
++  <on_crash>destroy</on_crash>
++  <devices>
++    <emulator>/usr/bin/qemu-system-aarch64</emulator>
++    <memballoon model='none'/>
++  </devices>
++</domain>
+diff --git a/tests/qemuxml2xmltest.c b/tests/qemuxml2xmltest.c
+index eae999dd6..aae632afe 100644
+--- a/tests/qemuxml2xmltest.c
++++ b/tests/qemuxml2xmltest.c
+@@ -1073,6 +1073,7 @@ mymain(void)
+     DO_TEST_FULL("aarch64-gic-none-v2", WHEN_BOTH, GIC_V2, NONE);
+     DO_TEST_FULL("aarch64-gic-none-v3", WHEN_BOTH, GIC_V3, NONE);
+     DO_TEST_FULL("aarch64-gic-none-both", WHEN_BOTH, GIC_BOTH, NONE);
++    DO_TEST_FULL("aarch64-gic-none-tcg", WHEN_BOTH, GIC_BOTH, NONE);
+     DO_TEST_FULL("aarch64-gic-default", WHEN_BOTH, GIC_NONE, NONE);
+     DO_TEST_FULL("aarch64-gic-default", WHEN_BOTH, GIC_V2, NONE);
+     DO_TEST_FULL("aarch64-gic-default", WHEN_BOTH, GIC_V3, NONE);
