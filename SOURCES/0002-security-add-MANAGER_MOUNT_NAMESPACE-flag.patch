@@ -18,10 +18,10 @@ Wire it up in the qemu driver
  5 files changed, 19 insertions(+), 1 deletion(-)
 
 diff --git a/src/qemu/qemu_driver.c b/src/qemu/qemu_driver.c
-index ce844bb04..555a1009b 100644
+index b7824512c..1f9264639 100644
 --- a/src/qemu/qemu_driver.c
 +++ b/src/qemu/qemu_driver.c
-@@ -417,6 +417,8 @@ qemuSecurityInit(virQEMUDriverPtr driver)
+@@ -419,6 +419,8 @@ qemuSecurityInit(virQEMUDriverPtr driver)
      if (virQEMUDriverIsPrivileged(driver)) {
          if (cfg->dynamicOwnership)
              flags |= VIR_SECURITY_MANAGER_DYNAMIC_OWNERSHIP;
@@ -31,7 +31,7 @@ index ce844bb04..555a1009b 100644
                                         cfg->user,
                                         cfg->group,
 diff --git a/src/security/security_dac.c b/src/security/security_dac.c
-index 922e48494..1f8d279bf 100644
+index ca7a6af6d..507be44a2 100644
 --- a/src/security/security_dac.c
 +++ b/src/security/security_dac.c
 @@ -57,6 +57,7 @@ struct _virSecurityDACData {
@@ -42,10 +42,11 @@ index 922e48494..1f8d279bf 100644
      char *baselabel;
      virSecurityManagerDACChownCallback chownCallback;
  };
-@@ -238,6 +239,15 @@ virSecurityDACSetDynamicOwnership(virSecurityManagerPtr mgr,
+@@ -237,6 +238,15 @@ virSecurityDACSetDynamicOwnership(virSecurityManagerPtr mgr,
+     priv->dynamicOwnership = dynamicOwnership;
  }
  
- void
++void
 +virSecurityDACSetMountNamespace(virSecurityManagerPtr mgr,
 +                                bool mountNamespace)
 +{
@@ -54,10 +55,9 @@ index 922e48494..1f8d279bf 100644
 +}
 +
 +
-+void
+ void
  virSecurityDACSetChownCallback(virSecurityManagerPtr mgr,
                                 virSecurityManagerDACChownCallback chownCallback)
- {
 diff --git a/src/security/security_dac.h b/src/security/security_dac.h
 index 846cefbb5..97681c961 100644
 --- a/src/security/security_dac.h
@@ -73,7 +73,7 @@ index 846cefbb5..97681c961 100644
                                      virSecurityManagerDACChownCallback chownCallback);
  
 diff --git a/src/security/security_manager.c b/src/security/security_manager.c
-index 6c777db1e..b2d04d4b9 100644
+index 95b995230..e43c99d4f 100644
 --- a/src/security/security_manager.c
 +++ b/src/security/security_manager.c
 @@ -146,7 +146,8 @@ virSecurityManagerNewDAC(const char *virtDriver,
@@ -95,7 +95,7 @@ index 6c777db1e..b2d04d4b9 100644
  
      return mgr;
 diff --git a/src/security/security_manager.h b/src/security/security_manager.h
-index 238e66cd0..96937a892 100644
+index 01296d339..08fb89203 100644
 --- a/src/security/security_manager.h
 +++ b/src/security/security_manager.h
 @@ -36,6 +36,7 @@ typedef enum {

@@ -1,0 +1,55 @@
+From: Peter Krempa <pkrempa@redhat.com>
+Date: Tue, 14 Nov 2017 15:34:46 +0100
+Subject: [PATCH] qemu: block: Add function to check if storage source allows
+ concurrent access
+
+Storage source format backing a shared device (e.g. running a cluster
+filesystem) needs to support the sharing so that metadata are not
+corrupted. Add a central function for checking this.
+
+(cherry picked from commit 1fc3cd8731640aefc48bbd9fc489f21cb99c6f67)
+---
+ src/qemu/qemu_block.c | 15 +++++++++++++++
+ src/qemu/qemu_block.h |  3 +++
+ 2 files changed, 18 insertions(+)
+
+diff --git a/src/qemu/qemu_block.c b/src/qemu/qemu_block.c
+index 7fb12ea5a..4c0a5eb78 100644
+--- a/src/qemu/qemu_block.c
++++ b/src/qemu/qemu_block.c
+@@ -379,6 +379,21 @@ qemuBlockGetNodeData(virJSONValuePtr data)
+ }
+ 
+ 
++/**
++ * qemuBlockStorageSourceSupportsConcurrentAccess:
++ * @src: disk storage source
++ *
++ * Returns true if the given storage format supports concurrent access from two
++ * separate processes.
++ */
++bool
++qemuBlockStorageSourceSupportsConcurrentAccess(virStorageSourcePtr src)
++{
++    /* no need to check in backing chain since only RAW storage supports this */
++    return src->format == VIR_STORAGE_FILE_RAW;
++}
++
++
+ /**
+  * qemuBlockStorageSourceBuildHostsJSONSocketAddress:
+  * @src: disk storage source
+diff --git a/src/qemu/qemu_block.h b/src/qemu/qemu_block.h
+index f0a2c9aa7..ebf3149ce 100644
+--- a/src/qemu/qemu_block.h
++++ b/src/qemu/qemu_block.h
+@@ -53,6 +53,9 @@ qemuBlockNodeNamesDetect(virQEMUDriverPtr driver,
+ virHashTablePtr
+ qemuBlockGetNodeData(virJSONValuePtr data);
+ 
++bool
++qemuBlockStorageSourceSupportsConcurrentAccess(virStorageSourcePtr src);
++
+ virJSONValuePtr
+ qemuBlockStorageSourceGetBackendProps(virStorageSourcePtr src);
+ 

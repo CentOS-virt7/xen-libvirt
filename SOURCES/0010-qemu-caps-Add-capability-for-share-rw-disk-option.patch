@@ -1,0 +1,126 @@
+From: Peter Krempa <pkrempa@redhat.com>
+Date: Wed, 15 Nov 2017 15:02:58 +0100
+Subject: [PATCH] qemu: caps: Add capability for 'share-rw' disk option
+
+'share-rw' for the disk device configures qemu to allow concurrent
+access to the backing storage.
+
+The capability is checked in various supported disk frontend buses since
+it does not make sense to partially backport it.
+
+(cherry picked from commit 860a3c4bea1d24773d8a495f213d5de3ac48a462)
+---
+ src/qemu/qemu_capabilities.c                      | 14 ++++++++++++++
+ src/qemu/qemu_capabilities.h                      | 10 ++++++++++
+ tests/qemucapabilitiesdata/caps_2.9.0.ppc64le.xml |  1 +
+ tests/qemucapabilitiesdata/caps_2.9.0.s390x.xml   |  1 +
+ tests/qemucapabilitiesdata/caps_2.9.0.x86_64.xml  |  1 +
+ 5 files changed, 27 insertions(+)
+
+diff --git a/src/qemu/qemu_capabilities.c b/src/qemu/qemu_capabilities.c
+index e7ea6f47c..2de84715e 100644
+--- a/src/qemu/qemu_capabilities.c
++++ b/src/qemu/qemu_capabilities.c
+@@ -439,6 +439,16 @@ VIR_ENUM_IMPL(virQEMUCaps, QEMU_CAPS_LAST,
+               "virtio-net.tx_queue_size",
+               "chardev-reconnect",
+               "virtio-gpu.max_outputs",
++
++              /* 270 */
++              "vxhs",
++              "virtio-blk.num-queues",
++              "machine.pseries.resize-hpt",
++              "vmcoreinfo",
++              "spapr-vty",
++
++              /* 275 */
++              "disk-share-rw",
+     );
+ 
+ 
+@@ -1702,6 +1712,7 @@ static struct virQEMUCapsStringFlags virQEMUCapsObjectPropsVirtioBlk[] = {
+     { "event_idx", QEMU_CAPS_VIRTIO_BLK_EVENT_IDX },
+     { "scsi", QEMU_CAPS_VIRTIO_BLK_SCSI },
+     { "logical_block_size", QEMU_CAPS_BLOCKIO },
++    { "share-rw", QEMU_CAPS_DISK_SHARE_RW },
+ };
+ 
+ static struct virQEMUCapsStringFlags virQEMUCapsObjectPropsVirtioNet[] = {
+@@ -1732,10 +1743,12 @@ static struct virQEMUCapsStringFlags virQEMUCapsObjectPropsVfioPCI[] = {
+ static struct virQEMUCapsStringFlags virQEMUCapsObjectPropsSCSIDisk[] = {
+     { "channel", QEMU_CAPS_SCSI_DISK_CHANNEL },
+     { "wwn", QEMU_CAPS_SCSI_DISK_WWN },
++    { "share-rw", QEMU_CAPS_DISK_SHARE_RW },
+ };
+ 
+ static struct virQEMUCapsStringFlags virQEMUCapsObjectPropsIDEDrive[] = {
+     { "wwn", QEMU_CAPS_IDE_DRIVE_WWN },
++    { "share-rw", QEMU_CAPS_DISK_SHARE_RW },
+ };
+ 
+ static struct virQEMUCapsStringFlags virQEMUCapsObjectPropsPiix4PM[] = {
+@@ -1766,6 +1779,7 @@ static struct virQEMUCapsStringFlags virQEMUCapsObjectPropsQ35PCIHost[] = {
+ 
+ static struct virQEMUCapsStringFlags virQEMUCapsObjectPropsUSBStorage[] = {
+     { "removable", QEMU_CAPS_USB_STORAGE_REMOVABLE },
++    { "share-rw", QEMU_CAPS_DISK_SHARE_RW },
+ };
+ 
+ static struct virQEMUCapsStringFlags virQEMUCapsObjectPropsKVMPit[] = {
+diff --git a/src/qemu/qemu_capabilities.h b/src/qemu/qemu_capabilities.h
+index f32687d4a..9c92d6b46 100644
+--- a/src/qemu/qemu_capabilities.h
++++ b/src/qemu/qemu_capabilities.h
+@@ -426,6 +426,16 @@ typedef enum {
+     QEMU_CAPS_CHARDEV_RECONNECT, /* -chardev reconnect */
+     QEMU_CAPS_VIRTIO_GPU_MAX_OUTPUTS, /* -device virtio-(vga|gpu-*),max-outputs= */
+ 
++    /* 270 */
++    QEMU_CAPS_VXHS, /* -drive file.driver=vxhs via query-qmp-schema */
++    QEMU_CAPS_VIRTIO_BLK_NUM_QUEUES, /* virtio-blk-*.num-queues */
++    QEMU_CAPS_MACHINE_PSERIES_RESIZE_HPT, /* -machine pseries,resize-hpt */
++    QEMU_CAPS_DEVICE_VMCOREINFO, /* -device vmcoreinfo */
++    QEMU_CAPS_DEVICE_SPAPR_VTY, /* -device spapr-vty */
++
++    /* 275 */
++    QEMU_CAPS_DISK_SHARE_RW, /* share-rw=on for concurrent disk access */
++
+     QEMU_CAPS_LAST /* this must always be the last item */
+ } virQEMUCapsFlags;
+ 
+diff --git a/tests/qemucapabilitiesdata/caps_2.9.0.ppc64le.xml b/tests/qemucapabilitiesdata/caps_2.9.0.ppc64le.xml
+index a373a6db6..9551907c6 100644
+--- a/tests/qemucapabilitiesdata/caps_2.9.0.ppc64le.xml
++++ b/tests/qemucapabilitiesdata/caps_2.9.0.ppc64le.xml
+@@ -172,6 +172,7 @@
+   <flag name='vnc-multi-servers'/>
+   <flag name='chardev-reconnect'/>
+   <flag name='virtio-gpu.max_outputs'/>
++  <flag name='disk-share-rw'/>
+   <version>2009000</version>
+   <kvmVersion>0</kvmVersion>
+   <package> (v2.9.0)</package>
+diff --git a/tests/qemucapabilitiesdata/caps_2.9.0.s390x.xml b/tests/qemucapabilitiesdata/caps_2.9.0.s390x.xml
+index e80782cfb..0a6fbd077 100644
+--- a/tests/qemucapabilitiesdata/caps_2.9.0.s390x.xml
++++ b/tests/qemucapabilitiesdata/caps_2.9.0.s390x.xml
+@@ -137,6 +137,7 @@
+   <flag name='vnc-multi-servers'/>
+   <flag name='chardev-reconnect'/>
+   <flag name='virtio-gpu.max_outputs'/>
++  <flag name='disk-share-rw'/>
+   <version>2009000</version>
+   <kvmVersion>0</kvmVersion>
+   <package></package>
+diff --git a/tests/qemucapabilitiesdata/caps_2.9.0.x86_64.xml b/tests/qemucapabilitiesdata/caps_2.9.0.x86_64.xml
+index 3641d0332..1294ebdb3 100644
+--- a/tests/qemucapabilitiesdata/caps_2.9.0.x86_64.xml
++++ b/tests/qemucapabilitiesdata/caps_2.9.0.x86_64.xml
+@@ -220,6 +220,7 @@
+   <flag name='vnc-multi-servers'/>
+   <flag name='chardev-reconnect'/>
+   <flag name='virtio-gpu.max_outputs'/>
++  <flag name='disk-share-rw'/>
+   <version>2009000</version>
+   <kvmVersion>0</kvmVersion>
+   <package> (v2.9.0)</package>

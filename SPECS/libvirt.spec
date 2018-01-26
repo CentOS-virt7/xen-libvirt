@@ -239,54 +239,34 @@
 
 Summary: Library providing a simple virtualization API
 Name: libvirt
-Version: 3.2.1
-Release: 6%{?dist}%{?extra_release}
+Version: 3.7.0
+Release: 3%{?dist}%{?extra_release}
 License: LGPLv2+
 Group: Development/Libraries
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root
-URL: http://libvirt.org/
+URL: https://libvirt.org/
 
 %if %(echo %{version} | grep -q "\.0$"; echo $?) == 1
     %define mainturl stable_updates/
 %endif
-Source: http://libvirt.org/sources/%{?mainturl}libvirt-%{version}.tar.xz
+Source: https://libvirt.org/sources/%{?mainturl}libvirt-%{version}.tar.xz
 
-# Fix aarch64 gic default for non-kvm VMs (bz #1449837)
-Patch0001: 0001-tests-Check-default-GIC-version-for-aarch64-virt-TCG.patch
-Patch0002: 0002-qemu-Use-GICv2-for-aarch64-virt-TCG-guests.patch
-Patch0003: 0003-gic-Remove-VIR_GIC_VERSION_DEFAULT.patch
-# Fix resuming qemu VMs suspended before libvirt 3.2.0
-Patch0004: 0004-Revert-qemu-propagate-bridge-MTU-into-qemu-host_mtu-.patch
-# Fix issues with AMD CPU models, and some others
-Patch0005: 0005-cpu-Introduce-virCPUCopyMigratable.patch
-Patch0006: 0006-qemu-Move-common-code-in-virQEMUCapsInitCPUModel-one.patch
-Patch0007: 0007-qemu-Add-migratable-parameter-to-virQEMUCapsInitCPUM.patch
-Patch0008: 0008-qemu-Introduce-virQEMUCapsSetHostModel.patch
-Patch0009: 0009-qemu-Move-qemuCaps-CPU-data-copying-into-a-separate-.patch
-Patch0010: 0010-qemu-Introduce-virQEMUCapsHostCPUDataClear.patch
-Patch0011: 0011-qemu-Move-qemuCaps-host-CPU-data-in-a-struct.patch
-Patch0012: 0012-qemu-Prepare-qemuCaps-for-multiple-host-CPU-defs.patch
-Patch0013: 0013-qemu-Pass-migratable-host-CPU-model-to-virCPUUpdate.patch
-Patch0014: 0014-cpu-Drop-feature-filtering-from-virCPUUpdate.patch
-Patch0015: 0015-cpu-Introduce-virCPUGetHostIsSupported.patch
-Patch0016: 0016-qemu-Use-more-data-for-comparing-CPUs.patch
-
-# Enable ZFS storage driver (bz #1471912)
-Patch0101: 0101-spec-Add-support-for-building-the-zfs-storage-driver.patch
-# Don't use cgroup mount points from /proc/mounts that are hidden (bz
-# #1470593)
-Patch0102: 0102-Avoid-hidden-cgroup-mount-points.patch
-# disk driver name=... should be optional (bz #1473091)
-Patch0103: 0103-docs-schema-make-disk-driver-name-attribute-optional.patch
 # Fix TPM2 passthrough (bz #1486240)
-Patch0104: 0104-tpm-Use-dev-null-for-cancel-path-if-none-was-found.patch
+Patch0001: 0001-tpm-Use-dev-null-for-cancel-path-if-none-was-found.patch
 # Fix spice GL qemu:///system rendernode permissions (bz #1460804)
-Patch0105: 0105-security-add-MANAGER_MOUNT_NAMESPACE-flag.patch
-Patch0106: 0106-security-dac-relabel-spice-rendernode.patch
-# Fix on_reboot=destroy setting (bz #1476866)
-Patch0107: 0107-qemu-Honour-on_reboot.patch
-# Fix disk images in /dev/shm (bz #1482146)
-Patch0108: 0108-qemuDomainBuildNamespace-Move-dev-mountpoints-later.patch
+Patch0002: 0002-security-add-MANAGER_MOUNT_NAMESPACE-flag.patch
+Patch0003: 0003-security-dac-relabel-spice-rendernode.patch
+# CVE-2017-1000256:  libvirt: TLS certificate verification disabled for
+# clients (bz #1503687)
+Patch0004: 0004-qemu-ensure-TLS-clients-always-verify-the-server-cer.patch
+# Fix qemu image locking with shared disks (bz #1513447)
+Patch0005: 0005-qemu-Move-snapshot-disk-validation-functions-into-on.patch
+Patch0006: 0006-qemu-block-Add-function-to-check-if-storage-source-a.patch
+Patch0007: 0007-qemu-domain-Reject-shared-disk-access-if-backing-for.patch
+Patch0008: 0008-qemu-snapshot-Disallow-snapshot-of-unsupported-share.patch
+Patch0009: 0009-qemu-Disallow-pivot-of-shared-disks-to-unsupported-s.patch
+Patch0010: 0010-qemu-caps-Add-capability-for-share-rw-disk-option.patch
+Patch0011: 0011-qemu-command-Mark-shared-disks-as-such-in-qemu.patch
 
 # Fix build on CentOS 6
 Patch1001: 1001-libxl-Avoid-a-variable-named-stat.patch
@@ -332,7 +312,11 @@ BuildRequires: libtool
 BuildRequires: /usr/bin/pod2man
 %endif
 BuildRequires: git
+%if 0%{?fedora} >= 27
+BuildRequires: perl-interpreter
+%else
 BuildRequires: perl
+%endif
 BuildRequires: python
 %if %{with_systemd}
 BuildRequires: systemd-units
@@ -341,7 +325,6 @@ BuildRequires: systemd-units
 BuildRequires: xen-devel
 %endif
 BuildRequires: libxml2-devel
-BuildRequires: xhtml1-dtds
 BuildRequires: libxslt
 BuildRequires: readline-devel
 BuildRequires: ncurses-devel
@@ -1860,6 +1843,7 @@ exit 0
 %{_mandir}/man8/libvirtd.8*
 %{_mandir}/man8/virtlogd.8*
 %{_mandir}/man8/virtlockd.8*
+%{_mandir}/man7/virkey*.7*
 
 %doc examples/polkit/*.rules
 
@@ -2157,32 +2141,38 @@ exit 0
 
 
 %changelog
-* Fri Sep 15 2017 Cole Robinson <crobinso@redhat.com> - 3.2.1-6
+* Mon Dec 04 2017 Cole Robinson <crobinso@redhat.com> - 3.7.0-3
+- CVE-2017-1000256:  libvirt: TLS certificate verification disabled for
+  clients (bz #1503687)
+- Fix qemu image locking with shared disks (bz #1513447)
+
+* Fri Sep 15 2017 Cole Robinson <crobinso@redhat.com> - 3.7.0-2
 - Fix TPM2 passthrough (bz #1486240)
 - Fix spice GL qemu:///system rendernode permissions (bz #1460804)
-- Fix on_reboot=destroy setting (bz #1476866)
-- Fix disk images in /dev/shm (bz #1482146)
 
-* Fri Aug 04 2017 Cole Robinson <crobinso@redhat.com> - 3.2.1-5
-- Enable ZFS storage driver (bz #1471912)
-- Don't use cgroup mount points from /proc/mounts that are hidden (bz
-  #1470593)
-- disk driver name=... should be optional (bz #1473091)
+* Mon Sep  4 2017 Daniel P. Berrange <berrange@redhat.com> - 3.7.0-1
+- Rebase to version 3.7.0
 
-* Wed Jul 12 2017 Cole Robinson <crobinso@redhat.com> - 3.2.1-4
-- Fix resuming qemu VMs suspended before libvirt 3.2.0
-- Fix issues with AMD CPU models, and some others
+* Wed Aug  2 2017 Daniel P. Berrange <berrange@redhat.com> - 3.6.0-1
+- Rebase to version 3.6.0
 
-* Wed May 31 2017 Cole Robinson <crobinso@redhat.com> - 3.2.1-3
-- Tweak condition for not starting in live environment (bz #1146232)
+* Sun Jul 30 2017 Florian Weimer <fweimer@redhat.com> - 3.5.0-4
+- Rebuild with binutils fix for ppc64le (#1475636)
 
-* Tue May 30 2017 Cole Robinson <crobinso@redhat.com> - 3.2.1-2
-- Fix aarch64 gic default for non-kvm VMs (bz #1449837)
-- Don't run libvirtd in live environment, to avoid network collision (bz
-  #1146232)
+* Tue Jul 25 2017 Daniel P. Berrange <berrange@redhat.com> - 3.5.0-3
+- Disabled RBD on i386, arm, ppc64 (rhbz #1474743)
 
-* Wed May 10 2017 Cole Robinson <crobinso@redhat.com> - 3.2.1-1
-- Rebased to version 3.2.1
+* Mon Jul 17 2017 Cole Robinson <crobinso@redhat.com> - 3.5.0-2
+- Rebuild for xen 4.9
+
+* Thu Jul  6 2017 Daniel P. Berrange <berrange@redhat.com> - 3.5.0-1
+- Rebase to version 3.5.0
+
+* Fri Jun  2 2017 Daniel P. Berrange <berrange@redhat.com> - 3.4.0-1
+- Rebase to version 3.4.0
+
+* Mon May  8 2017 Daniel P. Berrange <berrange@redhat.com> - 3.3.0-1
+- Rebase to version 3.3.0
 
 * Mon Apr  3 2017 Daniel P. Berrange <berrange@redhat.com> - 3.2.0-1
 - Rebase to version 3.2.0

@@ -1,0 +1,63 @@
+From: Peter Krempa <pkrempa@redhat.com>
+Date: Wed, 15 Nov 2017 13:41:01 +0100
+Subject: [PATCH] qemu: snapshot: Disallow snapshot of unsupported shared disks
+
+Creating a snapshot would introduce a possibly unsupported member for
+sharing into the backing chain. Add a check to prevent that from
+happening.
+
+Resolves: https://bugzilla.redhat.com/show_bug.cgi?id=1511480
+(cherry picked from commit 9b2fbfa6f6b535b9f41a7503531d43d86d7a8868)
+---
+ src/qemu/qemu_driver.c | 24 ++++++++++++++++++++++++
+ 1 file changed, 24 insertions(+)
+
+diff --git a/src/qemu/qemu_driver.c b/src/qemu/qemu_driver.c
+index 57f0c2bf4..91119a494 100644
+--- a/src/qemu/qemu_driver.c
++++ b/src/qemu/qemu_driver.c
+@@ -13792,6 +13792,24 @@ qemuDomainSnapshotCreateActiveInternal(virConnectPtr conn,
+ }
+ 
+ 
++static int
++qemuDomainSnapshotPrepareDiskShared(virDomainSnapshotDiskDefPtr snapdisk,
++                                    virDomainDiskDefPtr domdisk)
++{
++    if (!domdisk->src->shared || domdisk->src->readonly)
++        return 0;
++
++    if (!qemuBlockStorageSourceSupportsConcurrentAccess(snapdisk->src)) {
++        virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
++                       _("shared access for disk '%s' requires use of "
++                         "supported storage format"), domdisk->dst);
++        return -1;
++    }
++
++    return 0;
++}
++
++
+ static int
+ qemuDomainSnapshotPrepareDiskExternalInactive(virDomainSnapshotDiskDefPtr snapdisk,
+                                               virDomainDiskDefPtr domdisk)
+@@ -13853,6 +13871,9 @@ qemuDomainSnapshotPrepareDiskExternalInactive(virDomainSnapshotDiskDefPtr snapdi
+         return -1;
+     }
+ 
++    if (qemuDomainSnapshotPrepareDiskShared(snapdisk, domdisk) < 0)
++        return -1;
++
+     return 0;
+ }
+ 
+@@ -13911,6 +13932,9 @@ qemuDomainSnapshotPrepareDiskExternalActive(virDomainSnapshotDiskDefPtr snapdisk
+         return -1;
+     }
+ 
++    if (qemuDomainSnapshotPrepareDiskShared(snapdisk, domdisk) < 0)
++        return -1;
++
+     return 0;
+ }
+ 

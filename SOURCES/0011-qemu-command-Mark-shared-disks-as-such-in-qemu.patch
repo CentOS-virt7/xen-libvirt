@@ -1,0 +1,133 @@
+From: Peter Krempa <pkrempa@redhat.com>
+Date: Wed, 15 Nov 2017 15:21:14 +0100
+Subject: [PATCH] qemu: command: Mark <shared/> disks as such in qemu
+
+Qemu has now an internal mechanism for locking images to fix specific
+cases of disk corruption. This requires libvirt to mark the image as
+shared so that qemu lifts certain restrictions.
+
+Resolves: https://bugzilla.redhat.com/show_bug.cgi?id=1378242
+(cherry picked from commit 28907b0043fbf71085a798372ab9c816ba043b93)
+---
+ src/qemu/qemu_command.c                            |  4 +++
+ .../qemuxml2argv-disk-drive-shared-locking.args    | 32 +++++++++++++++++
+ .../qemuxml2argv-disk-drive-shared-locking.xml     | 42 ++++++++++++++++++++++
+ tests/qemuxml2argvtest.c                           |  2 ++
+ 4 files changed, 80 insertions(+)
+ create mode 100644 tests/qemuxml2argvdata/qemuxml2argv-disk-drive-shared-locking.args
+ create mode 100644 tests/qemuxml2argvdata/qemuxml2argv-disk-drive-shared-locking.xml
+
+diff --git a/src/qemu/qemu_command.c b/src/qemu/qemu_command.c
+index ae78cd17e..883525752 100644
+--- a/src/qemu/qemu_command.c
++++ b/src/qemu/qemu_command.c
+@@ -2075,6 +2075,10 @@ qemuBuildDriveDevStr(const virDomainDef *def,
+         goto error;
+     }
+ 
++    if (disk->src->shared &&
++        virQEMUCapsGet(qemuCaps, QEMU_CAPS_DISK_SHARE_RW))
++        virBufferAddLit(&opt, ",share-rw=on");
++
+     if (!(drivealias = qemuAliasFromDisk(disk)))
+         goto error;
+     virBufferAsprintf(&opt, ",drive=%s,id=%s", drivealias, disk->info.alias);
+diff --git a/tests/qemuxml2argvdata/qemuxml2argv-disk-drive-shared-locking.args b/tests/qemuxml2argvdata/qemuxml2argv-disk-drive-shared-locking.args
+new file mode 100644
+index 000000000..cdf17f26d
+--- /dev/null
++++ b/tests/qemuxml2argvdata/qemuxml2argv-disk-drive-shared-locking.args
+@@ -0,0 +1,32 @@
++LC_ALL=C \
++PATH=/bin \
++HOME=/home/test \
++USER=test \
++LOGNAME=test \
++QEMU_AUDIO_DRV=none \
++/usr/bin/qemu-system-i686 \
++-name QEMUGuest1 \
++-S \
++-M pc \
++-m 214 \
++-smp 1,sockets=1,cores=1,threads=1 \
++-uuid c7a5fdbd-edaf-9455-926a-d65c16db1809 \
++-nographic \
++-nodefaults \
++-chardev socket,id=charmonitor,path=/tmp/lib/domain--1-QEMUGuest1/monitor.sock,\
++server,nowait \
++-mon chardev=charmonitor,id=monitor,mode=readline \
++-no-acpi \
++-boot c \
++-device virtio-scsi-pci,id=scsi0,bus=pci.0,addr=0x3 \
++-usb \
++-drive file=/dev/ide,format=raw,if=none,id=drive-ide0-0-0,cache=none \
++-device ide-drive,bus=ide.0,unit=0,share-rw=on,drive=drive-ide0-0-0,\
++id=ide0-0-0 \
++-drive file=/dev/scsi,format=raw,if=none,id=drive-scsi0-0-0-0,cache=none \
++-device scsi-disk,bus=scsi0.0,channel=0,scsi-id=0,lun=0,share-rw=on,\
++drive=drive-scsi0-0-0-0,id=scsi0-0-0-0 \
++-drive file=/dev/virtio,format=raw,if=none,id=drive-virtio-disk0,cache=none \
++-device virtio-blk-pci,bus=pci.0,addr=0x4,share-rw=on,drive=drive-virtio-disk0,\
++id=virtio-disk0 \
++-device virtio-balloon-pci,id=balloon0,bus=pci.0,addr=0x5
+diff --git a/tests/qemuxml2argvdata/qemuxml2argv-disk-drive-shared-locking.xml b/tests/qemuxml2argvdata/qemuxml2argv-disk-drive-shared-locking.xml
+new file mode 100644
+index 000000000..dd48857a3
+--- /dev/null
++++ b/tests/qemuxml2argvdata/qemuxml2argv-disk-drive-shared-locking.xml
+@@ -0,0 +1,42 @@
++<domain type='qemu'>
++  <name>QEMUGuest1</name>
++  <uuid>c7a5fdbd-edaf-9455-926a-d65c16db1809</uuid>
++  <memory unit='KiB'>219136</memory>
++  <currentMemory unit='KiB'>219136</currentMemory>
++  <vcpu placement='static'>1</vcpu>
++  <os>
++    <type arch='i686' machine='pc'>hvm</type>
++    <boot dev='hd'/>
++  </os>
++  <clock offset='utc'/>
++  <on_poweroff>destroy</on_poweroff>
++  <on_reboot>restart</on_reboot>
++  <on_crash>destroy</on_crash>
++  <devices>
++    <emulator>/usr/bin/qemu-system-i686</emulator>
++    <disk type='block' device='disk'>
++      <driver name='qemu' type='raw'/>
++      <source dev='/dev/ide'/>
++      <target dev='hda' bus='ide'/>
++      <shareable/>
++      <address type='drive' controller='0' bus='0' target='0' unit='0'/>
++    </disk>
++    <disk type='block' device='disk'>
++      <driver name='qemu' type='raw'/>
++      <source dev='/dev/scsi'/>
++      <target dev='sda' bus='scsi'/>
++      <shareable/>
++      <address type='drive' controller='0' bus='0' target='0' unit='0'/>
++    </disk>
++    <disk type='block' device='disk'>
++      <driver name='qemu' type='raw'/>
++      <source dev='/dev/virtio'/>
++      <target dev='vda' bus='virtio'/>
++      <shareable/>
++    </disk>
++    <controller type='usb' index='0'/>
++    <controller type='ide' index='0'/>
++    <controller type='scsi' index='0' model='virtio-scsi'/>
++    <memballoon model='virtio'/>
++  </devices>
++</domain>
+diff --git a/tests/qemuxml2argvtest.c b/tests/qemuxml2argvtest.c
+index 93f892229..9585fdb70 100644
+--- a/tests/qemuxml2argvtest.c
++++ b/tests/qemuxml2argvtest.c
+@@ -896,6 +896,8 @@ mymain(void)
+     DO_TEST("disk-drive-shared",
+             QEMU_CAPS_DRIVE_SERIAL);
+     DO_TEST_PARSE_ERROR("disk-drive-shared-qcow", NONE);
++    DO_TEST("disk-drive-shared-locking",
++            QEMU_CAPS_VIRTIO_SCSI, QEMU_CAPS_DISK_SHARE_RW);
+     DO_TEST("disk-drive-error-policy-stop",
+             QEMU_CAPS_MONITOR_JSON);
+     DO_TEST("disk-drive-error-policy-enospace",
