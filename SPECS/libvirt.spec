@@ -233,58 +233,34 @@
 
 Summary: Library providing a simple virtualization API
 Name: libvirt
-Version: 3.2.1
-Release: 481%{?dist}%{?extra_release}
+Version: 3.7.0
+Release: 3%{?dist}%{?extra_release}
 License: LGPLv2+
 Group: Development/Libraries
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root
-URL: http://libvirt.org/
-ExclusiveArch: x86_64 aarch64
+URL: https://libvirt.org/
 
 %if %(echo %{version} | grep -q "\.0$"; echo $?) == 1
     %define mainturl stable_updates/
 %endif
-Source: http://libvirt.org/sources/%{?mainturl}libvirt-%{version}.tar.xz
+Source: https://libvirt.org/sources/%{?mainturl}libvirt-%{version}.tar.xz
 
-# Fix aarch64 gic default for non-kvm VMs (bz #1449837)
-Patch0001: 0001-tests-Check-default-GIC-version-for-aarch64-virt-TCG.patch
-Patch0002: 0002-qemu-Use-GICv2-for-aarch64-virt-TCG-guests.patch
-Patch0003: 0003-gic-Remove-VIR_GIC_VERSION_DEFAULT.patch
-# Fix resuming qemu VMs suspended before libvirt 3.2.0
-Patch0004: 0004-Revert-qemu-propagate-bridge-MTU-into-qemu-host_mtu-.patch
-# Fix issues with AMD CPU models, and some others
-Patch0005: 0005-cpu-Introduce-virCPUCopyMigratable.patch
-Patch0006: 0006-qemu-Move-common-code-in-virQEMUCapsInitCPUModel-one.patch
-Patch0007: 0007-qemu-Add-migratable-parameter-to-virQEMUCapsInitCPUM.patch
-Patch0008: 0008-qemu-Introduce-virQEMUCapsSetHostModel.patch
-Patch0009: 0009-qemu-Move-qemuCaps-CPU-data-copying-into-a-separate-.patch
-Patch0010: 0010-qemu-Introduce-virQEMUCapsHostCPUDataClear.patch
-Patch0011: 0011-qemu-Move-qemuCaps-host-CPU-data-in-a-struct.patch
-Patch0012: 0012-qemu-Prepare-qemuCaps-for-multiple-host-CPU-defs.patch
-Patch0013: 0013-qemu-Pass-migratable-host-CPU-model-to-virCPUUpdate.patch
-Patch0014: 0014-cpu-Drop-feature-filtering-from-virCPUUpdate.patch
-Patch0015: 0015-cpu-Introduce-virCPUGetHostIsSupported.patch
-Patch0016: 0016-qemu-Use-more-data-for-comparing-CPUs.patch
-
-# Enable ZFS storage driver (bz #1471912)
-Patch0101: 0101-spec-Add-support-for-building-the-zfs-storage-driver.patch
-# Don't use cgroup mount points from /proc/mounts that are hidden (bz
-# #1470593)
-Patch0102: 0102-Avoid-hidden-cgroup-mount-points.patch
-# disk driver name=... should be optional (bz #1473091)
-Patch0103: 0103-docs-schema-make-disk-driver-name-attribute-optional.patch
 # Fix TPM2 passthrough (bz #1486240)
-Patch0104: 0104-tpm-Use-dev-null-for-cancel-path-if-none-was-found.patch
+Patch0001: 0001-tpm-Use-dev-null-for-cancel-path-if-none-was-found.patch
 # Fix spice GL qemu:///system rendernode permissions (bz #1460804)
-Patch0105: 0105-security-add-MANAGER_MOUNT_NAMESPACE-flag.patch
-Patch0106: 0106-security-dac-relabel-spice-rendernode.patch
-# Fix on_reboot=destroy setting (bz #1476866)
-Patch0107: 0107-qemu-Honour-on_reboot.patch
-# Fix disk images in /dev/shm (bz #1482146)
-Patch0108: 0108-qemuDomainBuildNamespace-Move-dev-mountpoints-later.patch
-
-# Fix build on CentOS 6
-Patch1001: 1001-libxl-Avoid-a-variable-named-stat.patch
+Patch0002: 0002-security-add-MANAGER_MOUNT_NAMESPACE-flag.patch
+Patch0003: 0003-security-dac-relabel-spice-rendernode.patch
+# CVE-2017-1000256:  libvirt: TLS certificate verification disabled for
+# clients (bz #1503687)
+Patch0004: 0004-qemu-ensure-TLS-clients-always-verify-the-server-cer.patch
+# Fix qemu image locking with shared disks (bz #1513447)
+Patch0005: 0005-qemu-Move-snapshot-disk-validation-functions-into-on.patch
+Patch0006: 0006-qemu-block-Add-function-to-check-if-storage-source-a.patch
+Patch0007: 0007-qemu-domain-Reject-shared-disk-access-if-backing-for.patch
+Patch0008: 0008-qemu-snapshot-Disallow-snapshot-of-unsupported-share.patch
+Patch0009: 0009-qemu-Disallow-pivot-of-shared-disks-to-unsupported-s.patch
+Patch0010: 0010-qemu-caps-Add-capability-for-share-rw-disk-option.patch
+Patch0011: 0011-qemu-command-Mark-shared-disks-as-such-in-qemu.patch
 
 Requires: libvirt-daemon = %{version}-%{release}
 Requires: libvirt-daemon-config-network = %{version}-%{release}
@@ -327,7 +303,11 @@ BuildRequires: libtool
 BuildRequires: /usr/bin/pod2man
 %endif
 BuildRequires: git
+%if 0%{?fedora} >= 27
+BuildRequires: perl-interpreter
+%else
 BuildRequires: perl
+%endif
 BuildRequires: python
 %if %{with_systemd}
 BuildRequires: systemd-units
@@ -336,7 +316,6 @@ BuildRequires: systemd-units
 BuildRequires: xen-devel
 %endif
 BuildRequires: libxml2-devel
-BuildRequires: xhtml1-dtds
 BuildRequires: libxslt
 BuildRequires: readline-devel
 BuildRequires: ncurses-devel
@@ -1859,6 +1838,7 @@ exit 0
 %{_mandir}/man8/libvirtd.8*
 %{_mandir}/man8/virtlogd.8*
 %{_mandir}/man8/virtlockd.8*
+%{_mandir}/man7/virkey*.7*
 
 %doc examples/polkit/*.rules
 
@@ -2156,20 +2136,11 @@ exit 0
 
 
 %changelog
+* Fri Jan 26 2018 Anthony PERARD <anthony.perard@citrix.com> - 3.7.0-3.xen410.el7.centos
+- Updates to 3.7.0-3.fc27
+
 * Wed Dec 13 2017 Anthony PERARD <anthony.perard@citrix.com> - 3.2.1-481
-- Update to ibvirt-3.2.1-6.fc26
-
-* Fri Sep 15 2017 Cole Robinson <crobinso@redhat.com> - 3.2.1-6
-- Fix TPM2 passthrough (bz #1486240)
-- Fix spice GL qemu:///system rendernode permissions (bz #1460804)
-- Fix on_reboot=destroy setting (bz #1476866)
-- Fix disk images in /dev/shm (bz #1482146)
-
-* Fri Aug 04 2017 Cole Robinson <crobinso@redhat.com> - 3.2.1-5
-- Enable ZFS storage driver (bz #1471912)
-- Don't use cgroup mount points from /proc/mounts that are hidden (bz
-  #1470593)
-- disk driver name=... should be optional (bz #1473091)
+- Update to libvirt-3.2.1-6.fc26
 
 * Fri Nov 24 2017 Anthony PERARD <anthony.perard@citrix.com> - 3.2.1-480
 - Xen 4.8 rebuild
@@ -2183,17 +2154,6 @@ exit 0
 * Wed Jul 12 2017 Cole Robinson <crobinso@redhat.com> - 3.2.1-4
 - Fix resuming qemu VMs suspended before libvirt 3.2.0
 - Fix issues with AMD CPU models, and some others
-
-* Wed May 31 2017 Cole Robinson <crobinso@redhat.com> - 3.2.1-3
-- Tweak condition for not starting in live environment (bz #1146232)
-
-* Tue May 30 2017 Cole Robinson <crobinso@redhat.com> - 3.2.1-2
-- Fix aarch64 gic default for non-kvm VMs (bz #1449837)
-- Don't run libvirtd in live environment, to avoid network collision (bz
-  #1146232)
-
-* Wed May 10 2017 Cole Robinson <crobinso@redhat.com> - 3.2.1-1
-- Rebased to version 3.2.1
 
 * Mon Apr  3 2017 Daniel P. Berrange <berrange@redhat.com> - 3.2.0-1
 - Rebase to version 3.2.0
@@ -2285,11 +2245,8 @@ exit 0
 * Fri Dec 18 2015 George Dunlap <george.dunlap@citrix.com> - 1.3.0-1
 - Enable xen4centos settings
 
-* Wed Dec  9 2015 Daniel Veillard <veillard@redhat.com> - 1.3.0-1
-- virt-admin and administration API
-- various improvements in virtio devices support
-- log daemon, logging improvements and protocol
-- many bug fixes and improvements
+* Wed Dec  9 2015 Daniel Berrange <berrange@redhat.com> - 1.3.0-1
+- Update to 1.3.0 release
 
 * Wed Nov 11 2015 Cole Robinson <crobinso@redhat.com> - 1.2.21-1
 - Update to 1.2.21 release
@@ -2341,14 +2298,7 @@ exit 0
 - Turn on with_xen and with_libxl for RHEL (CentOS)
 
 * Thu May 07 2015 Richard W.M. Jones <rjones@redhat.com> - 1.2.15-2
-- Add Cole Robinson\'s patch to fix arch selection (bz# 1219198, bz#1219191)
-
-* Mon May  4 2015 Daniel Veillard <veillard@redhat.com> - 1.2.15-1
-- Implement virDomainAddIOThread and virDomainDelIOThread
-- libxl: Introduce configuration file for libxl driver
-- Add VIR_DOMAIN_EVENT_ID_DEVICE_ADDED event
-- various improvements to parallels driver
-- a lot of improvement and bug fixes
+- Add Cole Robinson's patch to fix arch selection (bz# 1219198, bz#1219191)
 
 * Mon May 04 2015 Cole Robinson <crobinso@redhat.com> - 1.2.15-1
 - Rebased to version 1.2.15

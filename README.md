@@ -2,9 +2,8 @@
 
 This setup is meant to essentially track the Fedora packages.  There
 is a branch called `fedora`, that will always mirror some version of a
-Fedora repo.  Then there are Xen version branches: `xen-44`, `xen-46`,
-and `xen-48`, which are for builds against Xen 4.4, 4.6, and 4.8
-respectively.
+Fedora repo.  Then there are Xen version branches: `xen-46`, `xen-48` and
+`xen-410`, which are for builds against Xen 4.6, 4.8 and 4.10 respectively.
 
 It would be nice if we could simply pull directly from Fedora's git
 repo; but for some reason the layout of the files within the repo is

@@ -1,0 +1,146 @@
+From: Peter Krempa <pkrempa@redhat.com>
+Date: Tue, 14 Nov 2017 15:37:09 +0100
+Subject: [PATCH] qemu: domain: Reject shared disk access if backing format
+ does not support it
+
+Disk sharing between two VMs may corrupt the images if the format driver
+does not support it. Check that the user declared use of a supported
+storage format when they want to share the disk.
+
+Resolves: https://bugzilla.redhat.com/show_bug.cgi?id=1511480
+(cherry picked from commit 3b03a27cd00c2f032661d2bf8905795425752fc7)
+---
+ src/qemu/qemu_domain.c                             | 29 +++++++++++++++++++++-
+ .../qemuxml2argv-disk-drive-shared-qcow.xml        | 28 +++++++++++++++++++++
+ .../qemuxml2argv-disk-drive-shared.args            |  2 +-
+ .../qemuxml2argv-disk-drive-shared.xml             |  2 +-
+ tests/qemuxml2argvtest.c                           |  1 +
+ 5 files changed, 59 insertions(+), 3 deletions(-)
+ create mode 100644 tests/qemuxml2argvdata/qemuxml2argv-disk-drive-shared-qcow.xml
+
+diff --git a/src/qemu/qemu_domain.c b/src/qemu/qemu_domain.c
+index b98ffffae..42d17c1b0 100644
+--- a/src/qemu/qemu_domain.c
++++ b/src/qemu/qemu_domain.c
+@@ -25,6 +25,7 @@
+ 
+ #include "qemu_domain.h"
+ #include "qemu_alias.h"
++#include "qemu_block.h"
+ #include "qemu_cgroup.h"
+ #include "qemu_command.h"
+ #include "qemu_process.h"
+@@ -3299,6 +3300,29 @@ qemuDomainRedirdevDefValidate(const virDomainRedirdevDef *def)
+ }
+ 
+ 
++static int
++qemuDomainDeviceDefValidateDisk(const virDomainDiskDef *disk)
++{
++    if (disk->src->shared && !disk->src->readonly) {
++        if (disk->src->format <= VIR_STORAGE_FILE_AUTO) {
++            virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
++                           _("shared access for disk '%s' requires use of "
++                             "explicitly specified disk format"), disk->dst);
++            return -1;
++        }
++
++        if (!qemuBlockStorageSourceSupportsConcurrentAccess(disk->src)) {
++            virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
++                           _("shared access for disk '%s' requires use of "
++                             "supported storage format"), disk->dst);
++            return -1;
++        }
++    }
++
++    return 0;
++}
++
++
+ static int
+ qemuDomainDeviceDefValidate(const virDomainDeviceDef *dev,
+                             const virDomainDef *def ATTRIBUTE_UNUSED,
+@@ -3308,7 +3332,10 @@ qemuDomainDeviceDefValidate(const virDomainDeviceDef *dev,
+     virQEMUDriverConfigPtr cfg = virQEMUDriverGetConfig(driver);
+     int ret = -1;
+ 
+-    if (dev->type == VIR_DOMAIN_DEVICE_NET) {
++    if (dev->type == VIR_DOMAIN_DEVICE_DISK) {
++        if (qemuDomainDeviceDefValidateDisk(dev->data.disk) < 0)
++            goto cleanup;
++    } else if (dev->type == VIR_DOMAIN_DEVICE_NET) {
+         const virDomainNetDef *net = dev->data.net;
+ 
+         if (net->guestIP.nroutes || net->guestIP.nips) {
+diff --git a/tests/qemuxml2argvdata/qemuxml2argv-disk-drive-shared-qcow.xml b/tests/qemuxml2argvdata/qemuxml2argv-disk-drive-shared-qcow.xml
+new file mode 100644
+index 000000000..ca88a944b
+--- /dev/null
++++ b/tests/qemuxml2argvdata/qemuxml2argv-disk-drive-shared-qcow.xml
+@@ -0,0 +1,28 @@
++<domain type='qemu'>
++  <name>QEMUGuest1</name>
++  <uuid>c7a5fdbd-edaf-9455-926a-d65c16db1809</uuid>
++  <memory unit='KiB'>219136</memory>
++  <currentMemory unit='KiB'>219136</currentMemory>
++  <vcpu placement='static'>1</vcpu>
++  <os>
++    <type arch='i686' machine='pc'>hvm</type>
++    <boot dev='hd'/>
++  </os>
++  <clock offset='utc'/>
++  <on_poweroff>destroy</on_poweroff>
++  <on_reboot>restart</on_reboot>
++  <on_crash>destroy</on_crash>
++  <devices>
++    <emulator>/usr/bin/qemu-system-i686</emulator>
++    <disk type='block' device='disk'>
++      <driver name='qemu' type='qcow2'/>
++      <source dev='/dev/HostVG/QEMUGuest1'/>
++      <target dev='hda' bus='ide'/>
++      <shareable/>
++      <address type='drive' controller='0' bus='0' target='0' unit='0'/>
++    </disk>
++    <controller type='usb' index='0'/>
++    <controller type='ide' index='0'/>
++    <memballoon model='virtio'/>
++  </devices>
++</domain>
+diff --git a/tests/qemuxml2argvdata/qemuxml2argv-disk-drive-shared.args b/tests/qemuxml2argvdata/qemuxml2argv-disk-drive-shared.args
+index 502157bf8..326fde1b3 100644
+--- a/tests/qemuxml2argvdata/qemuxml2argv-disk-drive-shared.args
++++ b/tests/qemuxml2argvdata/qemuxml2argv-disk-drive-shared.args
+@@ -19,7 +19,7 @@ server,nowait \
+ -no-acpi \
+ -boot c \
+ -usb \
+--drive file=/dev/HostVG/QEMUGuest1,format=qcow2,if=none,id=drive-ide0-0-0,\
++-drive file=/dev/HostVG/QEMUGuest1,format=raw,if=none,id=drive-ide0-0-0,\
+ serial=XYZXYZXYZYXXYZYZYXYZY,cache=none \
+ -device ide-drive,bus=ide.0,unit=0,drive=drive-ide0-0-0,id=ide0-0-0 \
+ -drive file=/dev/HostVG/QEMUGuest2,format=raw,if=none,media=cdrom,\
+diff --git a/tests/qemuxml2argvdata/qemuxml2argv-disk-drive-shared.xml b/tests/qemuxml2argvdata/qemuxml2argv-disk-drive-shared.xml
+index 9f7472378..677c2b0b7 100644
+--- a/tests/qemuxml2argvdata/qemuxml2argv-disk-drive-shared.xml
++++ b/tests/qemuxml2argvdata/qemuxml2argv-disk-drive-shared.xml
+@@ -15,7 +15,7 @@
+   <devices>
+     <emulator>/usr/bin/qemu-system-i686</emulator>
+     <disk type='block' device='disk'>
+-      <driver name='qemu' type='qcow2'/>
++      <driver name='qemu' type='raw'/>
+       <source dev='/dev/HostVG/QEMUGuest1'/>
+       <target dev='hda' bus='ide'/>
+       <shareable/>
+diff --git a/tests/qemuxml2argvtest.c b/tests/qemuxml2argvtest.c
+index 18f06e5aa..93f892229 100644
+--- a/tests/qemuxml2argvtest.c
++++ b/tests/qemuxml2argvtest.c
+@@ -895,6 +895,7 @@ mymain(void)
+             QEMU_CAPS_DRIVE_BOOT);
+     DO_TEST("disk-drive-shared",
+             QEMU_CAPS_DRIVE_SERIAL);
++    DO_TEST_PARSE_ERROR("disk-drive-shared-qcow", NONE);
+     DO_TEST("disk-drive-error-policy-stop",
+             QEMU_CAPS_MONITOR_JSON);
+     DO_TEST("disk-drive-error-policy-enospace",
