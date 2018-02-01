@@ -230,11 +230,12 @@
     %endif
 %endif
 
+%define xenversion 4.10.0
 
 Summary: Library providing a simple virtualization API
 Name: libvirt
 Version: 3.7.0
-Release: 3%{?dist}%{?extra_release}
+Release: 3.xen410%{?dist}%{?extra_release}
 License: LGPLv2+
 Group: Development/Libraries
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root
@@ -313,7 +314,7 @@ BuildRequires: python
 BuildRequires: systemd-units
 %endif
 %if %{with_xen} || %{with_libxl}
-BuildRequires: xen-devel
+BuildRequires: xen-devel >= %{xenversion}
 %endif
 BuildRequires: libxml2-devel
 BuildRequires: libxslt
@@ -982,7 +983,7 @@ Requires: libvirt-daemon-driver-nodedev = %{version}-%{release}
 Requires: libvirt-daemon-driver-nwfilter = %{version}-%{release}
 Requires: libvirt-daemon-driver-secret = %{version}-%{release}
 Requires: libvirt-daemon-driver-storage = %{version}-%{release}
-Requires: xen
+Requires: xen >= %{xenversion}
 
 %description daemon-xen
 Server side daemon and driver required to manage the virtualization
