@@ -1,10 +1,12 @@
 # -*- rpm-spec -*-
 
 # This spec file assumes you are building on a Fedora or RHEL version
-# that's still supported by the vendor: that means Fedora 23 or newer,
-# or RHEL 6 or newer. It may need some tweaks for other distros.
-# If neither fedora nor rhel was defined, try to guess them from dist
-%if (0%{?fedora} && 0%{?fedora} >= 23) || (0%{?rhel} && 0%{?rhel} >= 6)
+# that's still supported by the vendor. It may work on other distros
+# or versions, but no effort will be made to ensure that going forward.
+%define min_rhel 6
+%define min_fedora 26
+
+%if (0%{?fedora} && 0%{?fedora} >= %{min_fedora}) || (0%{?rhel} && 0%{?rhel} >= %{min_rhel})
     %define supported_platform 1
 %else
     %define supported_platform 0
@@ -14,7 +16,6 @@
 # (or provide a command-line override) if they backport any patches that
 # touch configure.ac or Makefile.am.
 %{!?enable_autotools:%global enable_autotools 0}
-
 
 # The hypervisor drivers that run in libvirtd
 %define with_xen           0%{!?_without_xen:1}
@@ -36,7 +37,7 @@
     %define with_qemu_tcg 0
     %define qemu_kvm_arches x86_64
     %if 0%{?rhel} >= 7
-        %define qemu_kvm_arches x86_64 %{power64} aarch64
+        %define qemu_kvm_arches x86_64 %{power64} aarch64 s390x
     %endif
 %endif
 
@@ -72,7 +73,7 @@
 %define with_numactl          0%{!?_without_numactl:1}
 
 # F25+ has zfs-fuse
-%if 0%{?fedora} >= 25
+%if 0%{?fedora}
     %define with_storage_zfs      0%{!?_without_storage_zfs:1}
 %else
     %define with_storage_zfs      0
@@ -88,6 +89,7 @@
 %define with_libssh2       0%{!?_without_libssh2:0}
 %define with_wireshark     0%{!?_without_wireshark:0}
 %define with_libssh        0%{!?_without_libssh:0}
+%define with_bash_completion  0%{!?_without_bash_completion:0}
 %define with_pm_utils      1
 
 # Finally set the OS / architecture specific special cases
@@ -141,6 +143,10 @@
     %define with_libxl 0
     %define with_hyperv 0
     %define with_vz 0
+
+    %if 0%{?rhel} > 7
+        %define with_lxc 0
+    %endif
 %endif
 
 # Fedora 17 / RHEL-7 are first where we use systemd. Although earlier
@@ -161,7 +167,7 @@
 %endif
 
 # fuse is used to provide virtualized /proc for LXC
-%if 0%{?fedora} || 0%{?rhel} >= 7
+%if %{with_lxc} && 0%{?rhel} != 6
     %define with_fuse      0%{!?_without_fuse:1}
 %endif
 
@@ -189,6 +195,11 @@
 # Enable libssh transport for new enough distros
 %if 0%{?fedora}
     %define with_libssh 0%{!?_without_libssh:1}
+%endif
+
+# Enable bash-completion for new enough distros
+%if 0%{?fedora} || 0%{?rhel} >= 7
+    %define with_bash_completion  0%{!?_without_bash_completion:1}
 %endif
 
 
@@ -226,21 +237,17 @@
     %define enable_werror --disable-werror
 %endif
 
-%if 0%{?fedora} >= 25
+%if 0%{?fedora}
     %define tls_priority "@LIBVIRT,SYSTEM"
 %else
-    %if 0%{?fedora}
-        %define tls_priority "@SYSTEM"
-    %else
-        %define tls_priority "NORMAL"
-    %endif
+    %define tls_priority "NORMAL"
 %endif
 
 
 Summary: Library providing a simple virtualization API
 Name: libvirt
-Version: 3.7.0
-Release: 3%{?dist}%{?extra_release}
+Version: 4.1.0
+Release: 2%{?dist}%{?extra_release}
 License: LGPLv2+
 Group: Development/Libraries
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root
@@ -250,26 +257,7 @@ URL: https://libvirt.org/
     %define mainturl stable_updates/
 %endif
 Source: https://libvirt.org/sources/%{?mainturl}libvirt-%{version}.tar.xz
-
-# Fix TPM2 passthrough (bz #1486240)
-Patch0001: 0001-tpm-Use-dev-null-for-cancel-path-if-none-was-found.patch
-# Fix spice GL qemu:///system rendernode permissions (bz #1460804)
-Patch0002: 0002-security-add-MANAGER_MOUNT_NAMESPACE-flag.patch
-Patch0003: 0003-security-dac-relabel-spice-rendernode.patch
-# CVE-2017-1000256:  libvirt: TLS certificate verification disabled for
-# clients (bz #1503687)
-Patch0004: 0004-qemu-ensure-TLS-clients-always-verify-the-server-cer.patch
-# Fix qemu image locking with shared disks (bz #1513447)
-Patch0005: 0005-qemu-Move-snapshot-disk-validation-functions-into-on.patch
-Patch0006: 0006-qemu-block-Add-function-to-check-if-storage-source-a.patch
-Patch0007: 0007-qemu-domain-Reject-shared-disk-access-if-backing-for.patch
-Patch0008: 0008-qemu-snapshot-Disallow-snapshot-of-unsupported-share.patch
-Patch0009: 0009-qemu-Disallow-pivot-of-shared-disks-to-unsupported-s.patch
-Patch0010: 0010-qemu-caps-Add-capability-for-share-rw-disk-option.patch
-Patch0011: 0011-qemu-command-Mark-shared-disks-as-such-in-qemu.patch
-
-# Fix build on CentOS 6
-Patch1001: 1001-libxl-Avoid-a-variable-named-stat.patch
+Patch1: 0001-tests-force-use-of-NORMAL-TLS-priority-in-test-suite.patch
 
 Requires: libvirt-daemon = %{version}-%{release}
 Requires: libvirt-daemon-config-network = %{version}-%{release}
@@ -312,7 +300,7 @@ BuildRequires: libtool
 BuildRequires: /usr/bin/pod2man
 %endif
 BuildRequires: git
-%if 0%{?fedora} >= 27
+%if 0%{?fedora} >= 27 || 0%{?rhel} > 7
 BuildRequires: perl-interpreter
 %else
 BuildRequires: perl
@@ -327,6 +315,9 @@ BuildRequires: xen-devel
 BuildRequires: libxml2-devel
 BuildRequires: libxslt
 BuildRequires: readline-devel
+%if %{with_bash_completion}
+BuildRequires: bash-completion >= 2.0
+%endif
 BuildRequires: ncurses-devel
 BuildRequires: gettext
 BuildRequires: libtasn1-devel
@@ -461,15 +452,16 @@ BuildRequires: numad
 %endif
 
 %if %{with_wireshark}
-    %if 0%{fedora} >= 24
 BuildRequires: wireshark-devel >= 2.1.0
-    %else
-BuildRequires: wireshark-devel >= 1.12.1
-    %endif
 %endif
 
 %if %{with_libssh}
 BuildRequires: libssh-devel >= 0.7.0
+%endif
+
+%if 0%{?fedora} > 27 || 0%{?rhel} > 7
+BuildRequires: rpcgen
+BuildRequires: libtirpc-devel
 %endif
 
 Provides: bundled(gnulib)
@@ -804,7 +796,7 @@ Requires: gzip
 Requires: bzip2
 Requires: lzop
 Requires: xz
-    %if 0%{?fedora} >= 24
+    %if 0%{?fedora} || 0%{?rhel} > 7
 Requires: systemd-container
     %endif
 
@@ -822,7 +814,7 @@ Group: Development/Libraries
 Requires: libvirt-daemon = %{version}-%{release}
 # There really is a hard cross-driver dependency here
 Requires: libvirt-daemon-driver-network = %{version}-%{release}
-    %if 0%{?fedora} >= 24
+    %if 0%{?fedora} || 0%{?rhel} > 7
 Requires: systemd-container
     %endif
 
@@ -1027,6 +1019,9 @@ Requires: gnutls-utils
 # Needed for probing the power management features of the host.
 Requires: pm-utils
 %endif
+%if %{with_bash_completion}
+Requires: %{name}-bash-completion = %{version}-%{release}
+%endif
 
 %description client
 The client binaries needed to access the virtualization
@@ -1051,9 +1046,21 @@ Summary: Set of tools to control libvirt daemon
 Group: Development/Libraries
 Requires: %{name}-libs = %{version}-%{release}
 Requires: readline
+%if %{with_bash_completion}
+Requires: %{name}-bash-completion = %{version}-%{release}
+%endif
 
 %description admin
 The client side utilities to control the libvirt daemon.
+
+%if %{with_bash_completion}
+%package bash-completion
+Summary: Bash completion script
+Group: Development/Libraries
+
+%description bash-completion
+Bash completion script stub.
+%endif
 
 %if %{with_wireshark}
 %package wireshark
@@ -1112,10 +1119,6 @@ Libvirt plugin for NSS for translating domain names into IP addresses.
 
 
 %prep
-%if ! %{supported_platform}
-echo "This RPM requires either Fedora >= 20 or RHEL >= 6"
-exit 1
-%endif
 
 %setup -q
 
@@ -1156,6 +1159,11 @@ rm -f $PATCHLIST
 rm -rf .git
 
 %build
+%if ! %{supported_platform}
+echo "This RPM requires either Fedora >= %{min_fedora} or RHEL >= %{min_rhel}"
+exit 1
+%endif
+
 %if %{with_xen}
     %define arg_xen --with-xen
 %else
@@ -1176,8 +1184,10 @@ rm -rf .git
 
 %if %{with_lxc}
     %define arg_lxc --with-lxc
+    %define arg_login_shell --with-login-shell
 %else
     %define arg_lxc --without-lxc
+    %define arg_login_shell --without-login-shell
 %endif
 
 %if %{with_vbox}
@@ -1320,6 +1330,8 @@ rm -rf .git
 
 # place macros above and build commands below this comment
 
+export SOURCE_DATE_EPOCH=$(stat --printf='%Y' %{_specdir}/%{name}.spec)
+
 %if 0%{?enable_autotools}
  autoreconf -if
 %endif
@@ -1385,19 +1397,22 @@ rm -f po/stamp-po
            %{?arg_loader_nvram} \
            %{?enable_werror} \
            --enable-expensive-tests \
-           %{arg_init_script}
-make %{?_smp_mflags}
+           %{arg_init_script} \
+           %{?arg_login_shell}
+make %{?_smp_mflags} V=1
 gzip -9 ChangeLog
 
 %install
 rm -fr %{buildroot}
 
+export SOURCE_DATE_EPOCH=$(stat --printf='%Y' %{_specdir}/%{name}.spec)
+
 # Avoid using makeinstall macro as it changes prefixes rather than setting
 # DESTDIR. Newer make_install macro would be better but it's not available
 # on RHEL 5, thus we need to expand it here.
-make %{?_smp_mflags} install DESTDIR=%{?buildroot} SYSTEMD_UNIT_DIR=%{_unitdir}
+make %{?_smp_mflags} install DESTDIR=%{?buildroot} SYSTEMD_UNIT_DIR=%{_unitdir} V=1
 
-make %{?_smp_mflags} -C examples distclean
+make %{?_smp_mflags} -C examples distclean V=1
 
 rm -f $RPM_BUILD_ROOT%{_libdir}/*.la
 rm -f $RPM_BUILD_ROOT%{_libdir}/*.a
@@ -1408,13 +1423,7 @@ rm -f $RPM_BUILD_ROOT%{_libdir}/libvirt/connection-driver/*.a
 rm -f $RPM_BUILD_ROOT%{_libdir}/libvirt/storage-backend/*.la
 rm -f $RPM_BUILD_ROOT%{_libdir}/libvirt/storage-backend/*.a
 %if %{with_wireshark}
-    %if 0%{fedora} >= 24
 rm -f $RPM_BUILD_ROOT%{_libdir}/wireshark/plugins/libvirt.la
-    %else
-rm -f $RPM_BUILD_ROOT%{_libdir}/wireshark/plugins/*/libvirt.la
-mv $RPM_BUILD_ROOT%{_libdir}/wireshark/plugins/*/libvirt.so \
-      $RPM_BUILD_ROOT%{_libdir}/wireshark/plugins/libvirt.so
-    %endif
 %endif
 
 install -d -m 0755 $RPM_BUILD_ROOT%{_datadir}/lib/libvirt/dnsmasq/
@@ -1510,13 +1519,17 @@ exit 0
 
 %if %{with_systemd}
     %if %{with_systemd_macros}
-        %systemd_post virtlockd.socket virtlogd.socket libvirtd.service
+        %systemd_post virtlockd.socket virtlockd-admin.socket
+        %systemd_post virtlogd.socket virtlogd-admin.socket
+        %systemd_post libvirtd.service
     %else
 if [ $1 -eq 1 ] ; then
     # Initial installation
     /bin/systemctl enable \
         virtlockd.socket \
+        virtlockd-admin.socket \
         virtlogd.socket \
+        virtlogd-admin.socket \
         libvirtd.service >/dev/null 2>&1 || :
 fi
     %endif
@@ -1536,24 +1549,34 @@ fi
 /sbin/chkconfig --add virtlockd
 %endif
 
+# request daemon restart in posttrans
+mkdir -p %{_localstatedir}/lib/rpm-state/libvirt || :
+touch %{_localstatedir}/lib/rpm-state/libvirt/restart || :
+
 %preun daemon
 %if %{with_systemd}
     %if %{with_systemd_macros}
-        %systemd_preun libvirtd.service virtlogd.socket virtlogd.service virtlockd.socket virtlockd.service
+        %systemd_preun libvirtd.service
+        %systemd_preun virtlogd.socket virtlogd-admin.socket virtlogd.service
+        %systemd_preun virtlockd.socket virtlockd-admin.socket virtlockd.service
     %else
 if [ $1 -eq 0 ] ; then
     # Package removal, not upgrade
     /bin/systemctl --no-reload disable \
         libvirtd.service \
         virtlogd.socket \
+        virtlogd-admin.socket \
         virtlogd.service \
         virtlockd.socket \
+        virtlockd-admin.socket \
         virtlockd.service > /dev/null 2>&1 || :
     /bin/systemctl stop \
         libvirtd.service \
         virtlogd.socket \
+        virtlogd-admin.socket \
         virtlogd.service \
         virtlockd.socket \
+        virtlockd-admin.socket \
         virtlockd.service > /dev/null 2>&1 || :
 fi
     %endif
@@ -1574,23 +1597,11 @@ fi
 if [ $1 -ge 1 ] ; then
     /bin/systemctl reload-or-try-restart virtlockd.service >/dev/null 2>&1 || :
     /bin/systemctl reload-or-try-restart virtlogd.service >/dev/null 2>&1 || :
-    /bin/systemctl try-restart libvirtd.service >/dev/null 2>&1 || :
 fi
 %else
 if [ $1 -ge 1 ]; then
     /sbin/service virtlockd reload > /dev/null 2>&1 || :
     /sbin/service virtlogd reload > /dev/null 2>&1 || :
-    /sbin/service libvirtd condrestart > /dev/null 2>&1
-fi
-%endif
-
-%if %{with_systemd}
-%else
-%triggerpostun daemon -- libvirt-daemon < 1.2.1
-if [ "$1" -ge "1" ]; then
-    /sbin/service virtlockd reload > /dev/null 2>&1 || :
-    /sbin/service virtlogd reload > /dev/null 2>&1 || :
-    /sbin/service libvirtd condrestart > /dev/null 2>&1
 fi
 %endif
 
@@ -1601,17 +1612,29 @@ fi
 %triggerpostun daemon -- libvirt-daemon < 1.3.0
 if [ $1 -ge 1 ] ; then
 %if %{with_systemd}
-        /bin/systemctl is-enabled libvirtd.service 1>/dev/null 2>&1 &&
-            /bin/systemctl enable virtlogd.socket || :
-        /bin/systemctl is-active libvirtd.service 1>/dev/null 2>&1 &&
-            /bin/systemctl start virtlogd.socket || :
+    /bin/systemctl is-enabled libvirtd.service 1>/dev/null 2>&1 &&
+        /bin/systemctl enable virtlogd.socket virtlogd-admin.socket || :
+    /bin/systemctl is-active libvirtd.service 1>/dev/null 2>&1 &&
+        /bin/systemctl start virtlogd.socket virtlogd-admin.socket || :
 %else
-        /sbin/chkconfig libvirtd 1>/dev/null 2>&1 &&
-            /sbin/chkconfig virtlogd on || :
-        /sbin/service libvirtd status 1>/dev/null 2>&1 &&
-            /sbin/service virtlogd start || :
+    /sbin/chkconfig libvirtd 1>/dev/null 2>&1 &&
+        /sbin/chkconfig virtlogd on || :
+    /sbin/service libvirtd status 1>/dev/null 2>&1 &&
+        /sbin/service virtlogd start || :
+    /sbin/service virtlockd reload > /dev/null 2>&1 || :
+    /sbin/service virtlogd reload > /dev/null 2>&1 || :
 %endif
 fi
+
+%posttrans daemon
+if [ -f %{_localstatedir}/lib/rpm-state/libvirt/restart ]; then
+%if %{with_systemd}
+    /bin/systemctl try-restart libvirtd.service >/dev/null 2>&1 || :
+%else
+    /sbin/service libvirtd condrestart > /dev/null 2>&1 || :
+%endif
+fi
+rm -rf %{_localstatedir}/lib/rpm-state/libvirt || :
 
 %post daemon-config-network
 if test $1 -eq 1 && test ! -f %{_sysconfdir}/libvirt/qemu/networks/default.xml ; then
@@ -1651,23 +1674,35 @@ if test $1 -eq 1 && test ! -f %{_sysconfdir}/libvirt/qemu/networks/default.xml ;
     ln -s ../default.xml %{_sysconfdir}/libvirt/qemu/networks/autostart/default.xml
 
     # Make sure libvirt picks up the new network defininiton
+    mkdir -p %{_localstatedir}/lib/rpm-state/libvirt || :
+    touch %{_localstatedir}/lib/rpm-state/libvirt/restart || :
+fi
+
+%posttrans daemon-config-network
+if [ -f %{_localstatedir}/lib/rpm-state/libvirt/restart ]; then
 %if %{with_systemd}
-    /bin/systemctl try-restart libvirtd.service >/dev/null 2>&1 ||:
+    /bin/systemctl try-restart libvirtd.service >/dev/null 2>&1 || :
 %else
     /sbin/service libvirtd condrestart > /dev/null 2>&1 || :
 %endif
-
 fi
-
+rm -rf %{_localstatedir}/lib/rpm-state/libvirt || :
 
 %post daemon-config-nwfilter
 cp %{_datadir}/libvirt/nwfilter/*.xml %{_sysconfdir}/libvirt/nwfilter/
 # Make sure libvirt picks up the new nwfilter defininitons
+mkdir -p %{_localstatedir}/lib/rpm-state/libvirt || :
+touch %{_localstatedir}/lib/rpm-state/libvirt/restart || :
+
+%posttrans daemon-config-nwfilter
+if [ -f %{_localstatedir}/lib/rpm-state/libvirt/restart ]; then
 %if %{with_systemd}
-    /bin/systemctl try-restart libvirtd.service >/dev/null 2>&1 ||:
+    /bin/systemctl try-restart libvirtd.service >/dev/null 2>&1 || :
 %else
     /sbin/service libvirtd condrestart > /dev/null 2>&1 || :
 %endif
+fi
+rm -rf %{_localstatedir}/lib/rpm-state/libvirt || :
 
 
 %if %{with_systemd}
@@ -1757,7 +1792,7 @@ exit 0
 %files
 
 %files docs
-%doc AUTHORS ChangeLog.gz NEWS README TODO
+%doc AUTHORS ChangeLog.gz NEWS README README.md
 %doc libvirt-docs/*
 
 # API docs
@@ -1787,14 +1822,15 @@ exit 0
 %{_unitdir}/virt-guest-shutdown.target
 %{_unitdir}/virtlogd.service
 %{_unitdir}/virtlogd.socket
+%{_unitdir}/virtlogd-admin.socket
 %{_unitdir}/virtlockd.service
 %{_unitdir}/virtlockd.socket
+%{_unitdir}/virtlockd-admin.socket
 %else
 %{_sysconfdir}/rc.d/init.d/libvirtd
 %{_sysconfdir}/rc.d/init.d/virtlogd
 %{_sysconfdir}/rc.d/init.d/virtlockd
 %endif
-%doc daemon/libvirtd.upstart
 %config(noreplace) %{_sysconfdir}/sysconfig/libvirtd
 %config(noreplace) %{_sysconfdir}/sysconfig/virtlogd
 %config(noreplace) %{_sysconfdir}/sysconfig/virtlockd
@@ -1814,6 +1850,8 @@ exit 0
 %dir %attr(0711, root, root) %{_localstatedir}/cache/libvirt/
 
 
+%dir %attr(0755, root, root) %{_libdir}/libvirt/
+%dir %attr(0755, root, root) %{_libdir}/libvirt/connection-driver/
 %dir %attr(0755, root, root) %{_libdir}/libvirt/lock-driver
 %attr(0755, root, root) %{_libdir}/libvirt/lock-driver/lockd.so
 
@@ -2038,6 +2076,10 @@ exit 0
 %{_datadir}/systemtap/tapset/libvirt_qemu_probes*.stp
 %{_datadir}/systemtap/tapset/libvirt_functions.stp
 
+%if %{with_bash_completion}
+%{_datadir}/bash-completion/completions/virsh
+%endif
+
 
 %if %{with_systemd}
 %{_unitdir}/libvirt-guests.service
@@ -2048,7 +2090,9 @@ exit 0
 %attr(0755, root, root) %{_libexecdir}/libvirt-guests.sh
 
 %files libs -f %{name}.lang
-%doc COPYING COPYING.LESSER
+# RHEL6 doesn't have 'license' macro
+%{!?_licensedir:%global license %%doc}
+%license COPYING COPYING.LESSER
 %config(noreplace) %{_sysconfdir}/libvirt/libvirt.conf
 %config(noreplace) %{_sysconfdir}/libvirt/libvirt-admin.conf
 %{_libdir}/libvirt.so.*
@@ -2085,7 +2129,14 @@ exit 0
 %files admin
 %{_mandir}/man1/virt-admin.1*
 %{_bindir}/virt-admin
+%if %{with_bash_completion}
+%{_datadir}/bash-completion/completions/virt-admin
+%endif
 
+%if %{with_bash_completion}
+%files bash-completion
+%{_datadir}/bash-completion/completions/vsh
+%endif
 
 %if %{with_wireshark}
 %files wireshark
@@ -2141,14 +2192,29 @@ exit 0
 
 
 %changelog
-* Mon Dec 04 2017 Cole Robinson <crobinso@redhat.com> - 3.7.0-3
-- CVE-2017-1000256:  libvirt: TLS certificate verification disabled for
-  clients (bz #1503687)
-- Fix qemu image locking with shared disks (bz #1513447)
+* Wed Mar 21 2018 Daniel P. Berrangé <berrange@redhat.com> - 4.1.0-2
+- Fix systemd macro argument with line continuations (rhbz#1558648)
 
-* Fri Sep 15 2017 Cole Robinson <crobinso@redhat.com> - 3.7.0-2
-- Fix TPM2 passthrough (bz #1486240)
-- Fix spice GL qemu:///system rendernode permissions (bz #1460804)
+* Mon Mar  5 2018 Daniel Berrange <berrange@redhat.com> - 4.1.0-1
+- Rebase to version 4.1.0
+
+* Wed Feb 07 2018 Fedora Release Engineering <releng@fedoraproject.org> - 4.0.0-2
+- Rebuilt for https://fedoraproject.org/wiki/Fedora_28_Mass_Rebuild
+
+* Fri Jan 19 2018 Daniel P. Berrange <berrange@redhat.com> - 4.0.0-1
+- Rebase to version 4.0.0
+
+* Wed Dec 20 2017 Cole Robinson <crobinso@redhat.com> - 3.10.0-2
+- Rebuild for xen 4.10
+
+* Tue Dec  5 2017 Daniel P. Berrange <berrange@redhat.com> - 3.10.0-1
+- Rebase to version 3.10.0
+
+* Fri Nov  3 2017 Daniel P. Berrange <berrange@redhat.com> - 3.9.0-1
+- Rebase to version 3.9.0
+
+* Wed Oct  4 2017 Daniel P. Berrange <berrange@redhat.com> - 3.8.0-1
+- Rebase to version 3.8.0
 
 * Mon Sep  4 2017 Daniel P. Berrange <berrange@redhat.com> - 3.7.0-1
 - Rebase to version 3.7.0
@@ -2185,141 +2251,3 @@ exit 0
 
 * Thu Jan 19 2017 Daniel P. Berrange <berrange@redhat.com> - 3.0.0-1
 - Rebase to version 3.0.0
-
-* Thu Jan 12 2017 Igor Gnatenko <ignatenko@redhat.com> - 2.5.0-3
-- Rebuild for readline 7.x
-
-* Thu Dec  8 2016 Daniel P. Berrange <berrange@redhat.com> - 2.5.0-2
-- Rebuild to pick up new libxen* soname
-
-* Mon Dec  5 2016 Daniel P. Berrange <berrange@redhat.com> - 2.5.0-1
-- Rebase to version 2.5.0
-
-* Wed Nov  2 2016 Daniel P. Berrange <berrange@redhat.com> - 2.4.0-1
-- Rebase to version 2.4.0
-
-* Thu Oct  6 2016 Daniel P. Berrange <berrange@redhat.com> - 2.3.0-1
-- Rebase to version 2.3.0
-
-* Mon Sep  5 2016 Daniel P. Berrange <berrange@redhat.com> - 2.2.0-1
-- Rebase to version 2.2.0
-
-* Tue Aug  2 2016 Daniel P. Berrange <berrange@redhat.com> - 2.1.0-1
-- Rebase to version 2.1.0
-
-* Sat Jul 23 2016 Richard W.M. Jones <rjones@redhat.com> - 2.0.0-2
-- Rebuild to attempt to fix 'nothing provides libxenctrl.so.4.6()(64bit) needed
-  by libvirt-daemon-2.0.0-1.fc25.x86_64'
-
-* Fri Jul  1 2016 Daniel P. Berrange <berrange@redhat.com> - 2.0.0-1
-- Rebase to version 2.0.0
-- Temporarily disable wireshark plugin due to broken wireshark headers (rhbz #1351984)
-
-* Mon Jun 13 2016 Richard W.M. Jones <rjones@redhat.com> - 1.3.5-2
-- Rebuild against new glibc
-  (see https://lists.fedoraproject.org/archives/list/devel@lists.fedoraproject.org/thread/VUOTESHSWFRCYPXIVG6BSMAUITS7QCK2/).
-
-* Mon Jun  6 2016 Daniel P. Berrange <berrange@redhat.com> - 1.3.5-1
-- Rebase to version 1.3.5
-- Pull in refactored, simplified spec file from upstream
-
-* Fri May 20 2016 Cole Robinson <crobinso@redhat.com> - 1.3.4-2
-- Fix libxl video config via virt-install (bz #1334557)
-- Advertise fedora edk2 firmware builds to apps (bz #1335395)
-
-* Mon May 02 2016 Cole Robinson <crobinso@redhat.com> - 1.3.4-1
-- Rebased to version 1.3.4
-
-* Tue Apr 19 2016 Cole Robinson <crobinso@redhat.com> - 1.3.3-3
-- Fix 200ms performance problem when waiting for monitor socket of new domains.
-
-* Thu Apr 14 2016 Cole Robinson <crobinso@redhat.com> - 1.3.3-2
-- libvirt assigns same address to two PCI devices (bz #1325085)
-- Fix build with -Werror
-
-* Thu Apr 07 2016 Cole Robinson <crobinso@redhat.com> - 1.3.3-1
-- Rebased to version 1.3.3
-
-* Thu Mar 17 2016 Cole Robinson <crobinso@redhat.com> - 1.3.2-3
-- Fix qemu:///session disconnect after 30 seconds
-- Fix 'permission denied' errors trying to unlink disk images (bz #1289327)
-- Fix qemu:///session connect race failures (bz #1271183)
-- driver: log missing modules as INFO, not WARN (bz #1274849)
-
-* Wed Mar  9 2016 Richard W.M. Jones <rjones@redhat.com> - 1.3.2-2
-- Add fix for RHBZ#1315606.
-
-* Tue Mar  1 2016 Daniel Berrange <berrange@redhat.com> - 1.3.2-1
-- Update to 1.3.2 release
-
-* Thu Feb 04 2016 Fedora Release Engineering <releng@fedoraproject.org> - 1.3.1-2
-- Rebuilt for https://fedoraproject.org/wiki/Fedora_24_Mass_Rebuild
-
-* Tue Jan 19 2016 Daniel Berrange <berrange@redhat.com> - 1.3.1-1
-- Update to 1.3.1 release
-
-* Wed Dec  9 2015 Daniel Berrange <berrange@redhat.com> - 1.3.0-1
-- Update to 1.3.0 release
-
-* Wed Nov 11 2015 Cole Robinson <crobinso@redhat.com> - 1.2.21-1
-- Update to 1.2.21 release
-
-* Sun Oct 11 2015 Cole Robinson <crobinso@redhat.com> - 1.2.20-2
-- Rebuild for xen 4.6
-
-* Fri Oct  2 2015 Daniel P. Berrange <berrange@redhat.com> - 1.2.20-1
-- Update to 1.2.20 release
-
-* Wed Sep  2 2015 Daniel P. Berrange <berrange@redhat.com> - 1.2.19-1
-- Update to 1.2.19 release
-
-* Tue Aug  4 2015 Daniel P. Berrange <berrange@redhat.com> - 1.2.18-1
-- Update to 1.2.18 release
-
-* Wed Jul 29 2015 Richard W.M. Jones <rjones@redhat.com> - 1.2.17-2
-- Fix 'Cannot write data: Broken pipe [code=38 domain=7]' (RHBZ#1247746).
-
-* Tue Jul 14 2015 Cole Robinson <crobinso@redhat.com> - 1.2.17-1
-- numerous improvements and refactoring of the parallels driver
-- hardening of vcpu code
-- hardening of migration code
-- a lot of improvement and bug fixes
-
-* Sun Jul 12 2015 Peter Robinson <pbrobinson@fedoraproject.org> 1.2.16-3
-- Rebuild (aarch64)
-
-* Tue Jun 16 2015 Daniel P. Berrange <berrange@redhat.com> - 1.2.16-2
-- Rebuild for libwsman soname bump
-
-* Mon Jun 01 2015 Daniel P. Berrange <berrange@redhat.com> - 1.2.16-1
-- Update to 1.2.16 release
-
-* Thu May 07 2015 Richard W.M. Jones <rjones@redhat.com> - 1.2.15-2
-- Add Cole Robinson's patch to fix arch selection (bz# 1219198, bz#1219191)
-
-* Mon May 04 2015 Cole Robinson <crobinso@redhat.com> - 1.2.15-1
-- Rebased to version 1.2.15
-
-* Wed Apr 15 2015 Cole Robinson <crobinso@redhat.com> - 1.2.14-2
-- Fix LXC domain startup (bz #1210397)
-- Fix race starting multiple session daemons (bz #1200149)
-- Fix change-media success messages
-- Strip invalid control codes from XML (bz #1066564, bz #1184131)
-
-* Thu Apr 02 2015 Cole Robinson <crobinso@redhat.com> - 1.2.14-1
-- Rebased to version 1.2.14
-
-* Tue Mar 10 2015 Cole Robinson <crobinso@redhat.com> - 1.2.13-2
-- Fix connecting to qemu:///session (bz #1198244)
-
-* Mon Mar 02 2015 Cole Robinson <crobinso@redhat.com> - 1.2.13-1
-- Rebased to version 1.2.13
-- lot of improvements around NUMA code
-- a lot of improvement and bug fixes
-
-* Tue Feb  3 2015 Daniel P. Berrange <berrange@redhat.com> - 1.2.12-2
-- Rebuild for changed xen soname
-
-* Tue Jan 27 2015 Daniel P. Berrange <berrange@redhat.com> - 1.2.12-1
-- Update to 1.2.12 release
-
