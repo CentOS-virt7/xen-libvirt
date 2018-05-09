@@ -254,6 +254,9 @@ ExclusiveArch: x86_64 aarch64
 Source: https://libvirt.org/sources/%{?mainturl}libvirt-%{version}.tar.xz
 Patch1: 0001-tests-force-use-of-NORMAL-TLS-priority-in-test-suite.patch
 
+# Build fix
+Patch1001: 1001-libxl-Fix-shadowed-variable-clock-on-CentOS-6.patch
+
 Requires: libvirt-daemon = %{version}-%{release}
 Requires: libvirt-daemon-config-network = %{version}-%{release}
 Requires: libvirt-daemon-config-nwfilter = %{version}-%{release}
