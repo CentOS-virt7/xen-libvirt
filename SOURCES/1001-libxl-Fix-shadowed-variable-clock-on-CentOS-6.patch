@@ -1,0 +1,94 @@
+From 496a20c006286a668e1cc045b54f1547bac9c734 Mon Sep 17 00:00:00 2001
+From: Anthony PERARD <anthony.perard@citrix.com>
+Date: Wed, 9 May 2018 15:50:03 +0100
+Subject: [PATCH] libxl: Fix shadowed variable 'clock' on CentOS 6
+
+On CentOS 6:
+libxl/libxl_conf.c: In function 'libxlMakeDomBuildInfo':
+libxl/libxl_conf.c:277: error: declaration of 'clock' shadows a global declaration [-Wshadow]
+/usr/include/time.h:183: error: shadowed declaration is here [-Wshadow]
+
+Signed-off-by: Anthony PERARD <anthony.perard@citrix.com>
+---
+ src/libxl/libxl_conf.c | 24 ++++++++++++------------
+ 1 file changed, 12 insertions(+), 12 deletions(-)
+
+diff --git a/src/libxl/libxl_conf.c b/src/libxl/libxl_conf.c
+index ea2b0c5..d117055 100644
+--- a/src/libxl/libxl_conf.c
++++ b/src/libxl/libxl_conf.c
+@@ -274,7 +274,7 @@ libxlMakeDomBuildInfo(virDomainDefPtr def,
+                       virCapsPtr caps,
+                       libxl_domain_config *d_config)
+ {
+-    virDomainClockDef clock = def->clock;
++    virDomainClockDef clockdef = def->clock;
+     libxl_domain_build_info *b_info = &d_config->b_info;
+     int hvm = def->os.type == VIR_DOMAIN_OSTYPE_HVM;
+     size_t i;
+@@ -294,11 +294,11 @@ libxlMakeDomBuildInfo(virDomainDefPtr def,
+     for (i = 0; i < virDomainDefGetVcpus(def); i++)
+         libxl_bitmap_set((&b_info->avail_vcpus), i);
+ 
+-    switch ((virDomainClockOffsetType) clock.offset) {
++    switch ((virDomainClockOffsetType) clockdef.offset) {
+     case VIR_DOMAIN_CLOCK_OFFSET_VARIABLE:
+-        if (clock.data.variable.basis == VIR_DOMAIN_CLOCK_BASIS_LOCALTIME)
++        if (clockdef.data.variable.basis == VIR_DOMAIN_CLOCK_BASIS_LOCALTIME)
+             libxl_defbool_set(&b_info->localtime, true);
+-        b_info->rtc_timeoffset = clock.data.variable.adjustment;
++        b_info->rtc_timeoffset = clockdef.data.variable.adjustment;
+         break;
+ 
+     case VIR_DOMAIN_CLOCK_OFFSET_LOCALTIME:
+@@ -312,20 +312,20 @@ libxlMakeDomBuildInfo(virDomainDefPtr def,
+     case VIR_DOMAIN_CLOCK_OFFSET_TIMEZONE:
+         virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
+                        _("unsupported clock offset '%s'"),
+-                       virDomainClockOffsetTypeToString(clock.offset));
++                       virDomainClockOffsetTypeToString(clockdef.offset));
+         return -1;
+ 
+     case VIR_DOMAIN_CLOCK_OFFSET_LAST:
+     default:
+         virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
+-                       _("unexpected clock offset '%d'"), clock.offset);
++                       _("unexpected clock offset '%d'"), clockdef.offset);
+         return -1;
+     }
+ 
+-    for (i = 0; i < clock.ntimers; i++) {
+-        switch ((virDomainTimerNameType) clock.timers[i]->name) {
++    for (i = 0; i < clockdef.ntimers; i++) {
++        switch ((virDomainTimerNameType) clockdef.timers[i]->name) {
+         case VIR_DOMAIN_TIMER_NAME_TSC:
+-            switch (clock.timers[i]->mode) {
++            switch (clockdef.timers[i]->mode) {
+             case VIR_DOMAIN_TIMER_MODE_NATIVE:
+                 b_info->tsc_mode = LIBXL_TSC_MODE_NATIVE;
+                 break;
+@@ -344,10 +344,10 @@ libxlMakeDomBuildInfo(virDomainDefPtr def,
+             if (!hvm) {
+                 virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
+                                _("unsupported timer type (name) '%s'"),
+-                               virDomainTimerNameTypeToString(clock.timers[i]->name));
++                               virDomainTimerNameTypeToString(clockdef.timers[i]->name));
+                 return -1;
+             }
+-            if (clock.timers[i]->present == 1)
++            if (clockdef.timers[i]->present == 1)
+                 libxl_defbool_set(&b_info->u.hvm.hpet, 1);
+             break;
+ 
+@@ -358,7 +358,7 @@ libxlMakeDomBuildInfo(virDomainDefPtr def,
+         case VIR_DOMAIN_TIMER_NAME_PIT:
+             virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
+                            _("unsupported timer type (name) '%s'"),
+-                           virDomainTimerNameTypeToString(clock.timers[i]->name));
++                           virDomainTimerNameTypeToString(clockdef.timers[i]->name));
+             return -1;
+ 
+         case VIR_DOMAIN_TIMER_NAME_LAST:
+-- 
+Anthony PERARD
+
