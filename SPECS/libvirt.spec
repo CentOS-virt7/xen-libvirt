@@ -217,6 +217,7 @@ Summary: Library providing a simple virtualization API
 Name: libvirt
 Version: 4.10.0
 Release: 2.xen410%{?dist}%{?extra_release}
+Epoch: 1
 License: LGPLv2+
 URL: https://libvirt.org/
 
@@ -1927,6 +1928,7 @@ exit 0
 %changelog
 * Wed Jan 09 2019 Anthony PERARD <anthony.perard@citrix.com> - 4.10.0-2.xen410
 - Import libvirt-4.10.0-2.fc30
+- Also bump Epoch to avoid issue when CentOS's libvirt package is updated
 
 * Mon Dec 10 2018 Daniel P. Berrangé <berrange@redhat.com> - 4.10.0-2
 - Disable RBD on 32-bit arches (rhbz #1657928)
