@@ -3,7 +3,7 @@
 # This spec file assumes you are building on a Fedora or RHEL version
 # that's still supported by the vendor. It may work on other distros
 # or versions, but no effort will be made to ensure that going forward.
-%define min_rhel 6
+%define min_rhel 7
 %define min_fedora 28
 
 %if (0%{?fedora} && 0%{?fedora} >= %{min_fedora}) || (0%{?rhel} && 0%{?rhel} >= %{min_rhel})
@@ -55,11 +55,7 @@
 %define with_hyperv        0%{!?_without_hyperv:1}
 
 # Then the secondary host drivers, which run inside libvirtd
-%if 0%{?fedora} || 0%{?rhel} >= 7
-    %define with_storage_rbd      0%{!?_without_storage_rbd:1}
-%else
-    %define with_storage_rbd      0
-%endif
+%define with_storage_rbd      0%{!?_without_storage_rbd:1}
 %if 0%{?fedora}
     %define with_storage_sheepdog 0%{!?_without_storage_sheepdog:1}
 %else
@@ -84,16 +80,13 @@
 
 # A few optional bits off by default, we enable later
 %define with_fuse          0%{!?_without_fuse:0}
-%define with_cgconfig      0%{!?_without_cgconfig:0}
 %define with_sanlock       0%{!?_without_sanlock:0}
-%define with_systemd       0%{!?_without_systemd:0}
 %define with_numad         0%{!?_without_numad:0}
 %define with_firewalld     0%{!?_without_firewalld:0}
 %define with_libssh2       0%{!?_without_libssh2:0}
 %define with_wireshark     0%{!?_without_wireshark:0}
 %define with_libssh        0%{!?_without_libssh:0}
 %define with_bash_completion  0%{!?_without_bash_completion:0}
-%define with_pm_utils      1
 
 # Finally set the OS / architecture specific special cases
 
@@ -118,7 +111,7 @@
 %endif
 
 # Ceph dropping support for 32-bit hosts
-%if 0%{?fedora} >= 30
+%if 0%{fedora} >= 30
     %ifarch %{arm} %{ix86}
         %define with_storage_rbd 0
     %endif
@@ -143,20 +136,10 @@
     %endif
 %endif
 
-# Fedora 17 / RHEL-7 are first where we use systemd. Although earlier
-# Fedora has systemd, libvirt still used sysvinit there.
-%if 0%{?fedora} || 0%{?rhel} >= 7
-    %define with_systemd 1
-    %define with_pm_utils 0
-%endif
-
-# Fedora 18 / RHEL-7 are first where firewalld support is enabled
-%if 0%{?fedora} || 0%{?rhel} >= 7
-    %define with_firewalld 1
-%endif
+%define with_firewalld 1
 
 # fuse is used to provide virtualized /proc for LXC
-%if %{with_lxc} && 0%{?rhel} != 6
+%if %{with_lxc}
     %define with_fuse      0%{!?_without_fuse:1}
 %endif
 
@@ -191,10 +174,7 @@
     %define with_libssh 0%{!?_without_libssh:1}
 %endif
 
-# Enable bash-completion for new enough distros
-%if 0%{?fedora} || 0%{?rhel} >= 7
-    %define with_bash_completion  0%{!?_without_bash_completion:1}
-%endif
+%define with_bash_completion  0%{!?_without_bash_completion:1}
 
 # Use Python 3 when possible, Python 2 otherwise
 %if 0%{?fedora} || 0%{?rhel} > 7
@@ -212,20 +192,10 @@
     %endif
 %endif
 
-# Pull in cgroups config system
-%if %{with_qemu} || %{with_lxc}
-    %define with_cgconfig 0%{!?_without_cgconfig:1}
-%endif
-
 # Force QEMU to run as non-root
 %define qemu_user  qemu
 %define qemu_group  qemu
 
-%if 0%{?fedora} || 0%{?rhel} >= 7
-    %define with_systemd_macros 1
-%else
-    %define with_systemd_macros 0
-%endif
 
 # RHEL releases provide stable tool chains and so it is safe to turn
 # compiler warning into errors without being worried about frequent
@@ -236,7 +206,7 @@
     %define enable_werror --disable-werror
 %endif
 
-%if 0%{?rhel} <= 7
+%if 0%{?rhel} == 7
     %define tls_priority "NORMAL"
 %else
     %define tls_priority "@LIBVIRT,SYSTEM"
@@ -300,9 +270,7 @@ BuildRequires: perl-interpreter
 BuildRequires: perl
 %endif
 BuildRequires: %{python}
-%if %{with_systemd}
 BuildRequires: systemd-units
-%endif
 %if %{with_libxl}
 BuildRequires: xen-devel
 %endif
@@ -315,49 +283,29 @@ BuildRequires: bash-completion >= 2.0
 BuildRequires: ncurses-devel
 BuildRequires: gettext
 BuildRequires: libtasn1-devel
-%if (0%{?rhel} && 0%{?rhel} < 7)
-BuildRequires: libgcrypt-devel
-%endif
 BuildRequires: gnutls-devel
 BuildRequires: libattr-devel
 # For pool-build probing for existing pools
 BuildRequires: libblkid-devel >= 2.17
 # for augparse, optionally used in testing
 BuildRequires: augeas
-%if 0%{?fedora} || 0%{?rhel} >= 7
 BuildRequires: systemd-devel >= 185
-%else
-BuildRequires: libudev-devel >= 145
-%endif
 BuildRequires: libpciaccess-devel >= 0.10.9
 BuildRequires: yajl-devel
 %if %{with_sanlock}
 BuildRequires: sanlock-devel >= 2.4
 %endif
 BuildRequires: libpcap-devel
-%if 0%{?rhel} && 0%{?rhel} < 7
-BuildRequires: libnl-devel
-%else
 BuildRequires: libnl3-devel
-%endif
 BuildRequires: avahi-devel
 BuildRequires: libselinux-devel
 BuildRequires: dnsmasq >= 2.41
 BuildRequires: iptables
-%if 0%{?rhel} && 0%{?rhel} < 7
-BuildRequires: iptables-ipv6
-%endif
 BuildRequires: radvd
 BuildRequires: ebtables
 BuildRequires: module-init-tools
 BuildRequires: cyrus-sasl-devel
-%if 0%{?fedora} || 0%{?rhel} >= 7
-# F22 polkit-devel doesn't pull in polkit anymore, which we need for pkcheck
 BuildRequires: polkit >= 0.112
-BuildRequires: polkit-devel >= 0.112
-%else
-BuildRequires: polkit-devel >= 0.93
-%endif
 # For mount/umount in FS driver
 BuildRequires: util-linux
 %if %{with_qemu}
@@ -379,12 +327,8 @@ BuildRequires: parted-devel
 # For Multipath support
 BuildRequires: device-mapper-devel
 %if %{with_storage_rbd}
-    %if 0%{?fedora} || 0%{?rhel} >= 7
 BuildRequires: librados2-devel
 BuildRequires: librbd1-devel
-    %else
-BuildRequires: ceph-devel
-    %endif
 %endif
 %if %{with_storage_gluster}
 BuildRequires: glusterfs-api-devel >= 3.4.1
@@ -411,11 +355,7 @@ BuildRequires: fuse-devel >= 2.8.6
 BuildRequires: libssh2-devel >= 1.3.0
 %endif
 
-%if 0%{?fedora} || 0%{?rhel} >= 7
 BuildRequires: netcf-devel >= 0.2.2
-%else
-BuildRequires: netcf-devel >= 0.1.8
-%endif
 %if %{with_esx}
 BuildRequires: libcurl-devel
 %endif
@@ -491,25 +431,16 @@ Requires: iproute-tc
 %endif
 
 Requires: avahi-libs
-%if 0%{?fedora} || 0%{?rhel} >= 7
 Requires: polkit >= 0.112
-%else
-Requires: polkit >= 0.93
-%endif
-%if %{with_cgconfig}
-Requires: libcgroup
-%endif
 %ifarch %{ix86} x86_64 ia64
 # For virConnectGetSysinfo
 Requires: dmidecode
 %endif
 # For service management
-%if %{with_systemd}
 Requires(post): systemd-units
 Requires(post): systemd-sysv
 Requires(preun): systemd-units
 Requires(postun): systemd-units
-%endif
 %if %{with_numad}
 Requires: numad
 %endif
@@ -548,9 +479,6 @@ Requires: libvirt-libs = %{version}-%{release}
 Requires: dnsmasq >= 2.41
 Requires: radvd
 Requires: iptables
-%if 0%{?rhel} && 0%{?rhel} < 7
-Requires: iptables-ipv6
-%endif
 
 %description daemon-driver-network
 The network driver plugin for the libvirtd daemon, providing
@@ -563,9 +491,6 @@ Summary: Nwfilter driver plugin for the libvirtd daemon
 Requires: libvirt-daemon = %{version}-%{release}
 Requires: libvirt-libs = %{version}-%{release}
 Requires: iptables
-%if 0%{?rhel} && 0%{?rhel} < 7
-Requires: iptables-ipv6
-%endif
 Requires: ebtables
 
 %description daemon-driver-nwfilter
@@ -579,11 +504,7 @@ Summary: Nodedev driver plugin for the libvirtd daemon
 Requires: libvirt-daemon = %{version}-%{release}
 Requires: libvirt-libs = %{version}-%{release}
 # needed for device enumeration
-%if 0%{?fedora} || 0%{?rhel} >= 7
 Requires: systemd >= 185
-%else
-Requires: udev >= 145
-%endif
 
 %description daemon-driver-nodedev
 The nodedev driver plugin for the libvirtd daemon, providing
@@ -595,9 +516,7 @@ capabilities.
 Summary: Interface driver plugin for the libvirtd daemon
 Requires: libvirt-daemon = %{version}-%{release}
 Requires: libvirt-libs = %{version}-%{release}
-%if (0%{?fedora} || 0%{?rhel} >= 7)
 Requires: netcf-libs >= 0.2.2
-%endif
 
 %description daemon-driver-interface
 The interface driver plugin for the libvirtd daemon, providing
@@ -998,10 +917,6 @@ Requires: ncurses
 Requires: gettext
 # Needed by virt-pki-validate script.
 Requires: gnutls-utils
-%if %{with_pm_utils}
-# Needed for probing the power management features of the host.
-Requires: pm-utils
-%endif
 %if %{with_bash_completion}
 Requires: %{name}-bash-completion = %{version}-%{release}
 %endif
@@ -1095,7 +1010,7 @@ Libvirt plugin for NSS for translating domain names into IP addresses.
 
 %prep
 
-%setup -q
+%autosetup -S git_am
 
 %build
 %if ! %{supported_platform}
@@ -1225,12 +1140,6 @@ exit 1
     %define arg_wireshark --without-wireshark-dissector
 %endif
 
-%if %{with_pm_utils}
-    %define arg_pm_utils --with-pm-utils
-%else
-    %define arg_pm_utils --without-pm-utils
-%endif
-
 %if %{with_storage_iscsi_direct}
     %define arg_storage_iscsi_direct --with-storage-iscsi-direct
 %else
@@ -1243,17 +1152,7 @@ exit 1
 %define arg_packager --with-packager="%{who}, %{when}, %{where}"
 %define arg_packager_version --with-packager-version="%{release}"
 
-%if %{with_systemd}
-    %define arg_init_script --with-init-script=systemd
-%else
-    %define arg_init_script --with-init-script=redhat
-%endif
-
-%if 0%{?fedora} || 0%{?rhel} >= 7
-    %define arg_selinux_mount --with-selinux-mount="/sys/fs/selinux"
-%else
-    %define arg_selinux_mount --with-selinux-mount="/selinux"
-%endif
+%define arg_selinux_mount --with-selinux-mount="/sys/fs/selinux"
 
 %if 0%{?fedora}
     # Nightly edk2.git-ovmf-x64
@@ -1335,7 +1234,7 @@ rm -f po/stamp-po
            --with-driver-modules \
            %{?arg_firewalld} \
            %{?arg_wireshark} \
-           %{?arg_pm_utils} \
+           --without-pm-utils \
            --with-nss-plugin \
            %{arg_packager} \
            %{arg_packager_version} \
@@ -1345,7 +1244,7 @@ rm -f po/stamp-po
            %{?arg_loader_nvram} \
            %{?enable_werror} \
            --enable-expensive-tests \
-           %{arg_init_script} \
+           --with-init-script=systemd \
            %{?arg_login_shell}
 make %{?_smp_mflags} V=1
 gzip -9 ChangeLog
@@ -1466,93 +1365,25 @@ exit 0
 
 %post daemon
 
-%if %{with_systemd}
-    %if %{with_systemd_macros}
-        %systemd_post virtlockd.socket virtlockd-admin.socket
-        %systemd_post virtlogd.socket virtlogd-admin.socket
-        %systemd_post libvirtd.service
-    %else
-if [ $1 -eq 1 ] ; then
-    # Initial installation
-    /bin/systemctl enable \
-        virtlockd.socket \
-        virtlockd-admin.socket \
-        virtlogd.socket \
-        virtlogd-admin.socket \
-        libvirtd.service >/dev/null 2>&1 || :
-fi
-    %endif
-%else
-    %if %{with_cgconfig}
-# Starting with Fedora 16/RHEL-7, systemd automounts all cgroups,
-# and cgconfig is no longer a necessary service.
-        %if 0%{?rhel} && 0%{?rhel} < 7
-if [ "$1" -eq "1" ]; then
-/sbin/chkconfig cgconfig on
-fi
-        %endif
-    %endif
-
-/sbin/chkconfig --add libvirtd
-/sbin/chkconfig --add virtlogd
-/sbin/chkconfig --add virtlockd
-%endif
+%systemd_post virtlockd.socket virtlockd-admin.socket
+%systemd_post virtlogd.socket virtlogd-admin.socket
+%systemd_post libvirtd.service
 
 # request daemon restart in posttrans
 mkdir -p %{_localstatedir}/lib/rpm-state/libvirt || :
 touch %{_localstatedir}/lib/rpm-state/libvirt/restart || :
 
 %preun daemon
-%if %{with_systemd}
-    %if %{with_systemd_macros}
-        %systemd_preun libvirtd.service
-        %systemd_preun virtlogd.socket virtlogd-admin.socket virtlogd.service
-        %systemd_preun virtlockd.socket virtlockd-admin.socket virtlockd.service
-    %else
-if [ $1 -eq 0 ] ; then
-    # Package removal, not upgrade
-    /bin/systemctl --no-reload disable \
-        libvirtd.service \
-        virtlogd.socket \
-        virtlogd-admin.socket \
-        virtlogd.service \
-        virtlockd.socket \
-        virtlockd-admin.socket \
-        virtlockd.service > /dev/null 2>&1 || :
-    /bin/systemctl stop \
-        libvirtd.service \
-        virtlogd.socket \
-        virtlogd-admin.socket \
-        virtlogd.service \
-        virtlockd.socket \
-        virtlockd-admin.socket \
-        virtlockd.service > /dev/null 2>&1 || :
-fi
-    %endif
-%else
-if [ $1 = 0 ]; then
-    /sbin/service libvirtd stop 1>/dev/null 2>&1
-    /sbin/chkconfig --del libvirtd
-    /sbin/service virtlogd stop 1>/dev/null 2>&1
-    /sbin/chkconfig --del virtlogd
-    /sbin/service virtlockd stop 1>/dev/null 2>&1
-    /sbin/chkconfig --del virtlockd
-fi
-%endif
+%systemd_preun libvirtd.service
+%systemd_preun virtlogd.socket virtlogd-admin.socket virtlogd.service
+%systemd_preun virtlockd.socket virtlockd-admin.socket virtlockd.service
 
 %postun daemon
-%if %{with_systemd}
 /bin/systemctl daemon-reload >/dev/null 2>&1 || :
 if [ $1 -ge 1 ] ; then
     /bin/systemctl reload-or-try-restart virtlockd.service >/dev/null 2>&1 || :
     /bin/systemctl reload-or-try-restart virtlogd.service >/dev/null 2>&1 || :
 fi
-%else
-if [ $1 -ge 1 ]; then
-    /sbin/service virtlockd reload > /dev/null 2>&1 || :
-    /sbin/service virtlogd reload > /dev/null 2>&1 || :
-fi
-%endif
 
 # In upgrade scenario we must explicitly enable virtlockd/virtlogd
 # sockets, if libvirtd is already enabled and start them if
@@ -1560,28 +1391,15 @@ fi
 # guests
 %triggerpostun daemon -- libvirt-daemon < 1.3.0
 if [ $1 -ge 1 ] ; then
-%if %{with_systemd}
     /bin/systemctl is-enabled libvirtd.service 1>/dev/null 2>&1 &&
         /bin/systemctl enable virtlogd.socket virtlogd-admin.socket || :
     /bin/systemctl is-active libvirtd.service 1>/dev/null 2>&1 &&
         /bin/systemctl start virtlogd.socket virtlogd-admin.socket || :
-%else
-    /sbin/chkconfig libvirtd 1>/dev/null 2>&1 &&
-        /sbin/chkconfig virtlogd on || :
-    /sbin/service libvirtd status 1>/dev/null 2>&1 &&
-        /sbin/service virtlogd start || :
-    /sbin/service virtlockd reload > /dev/null 2>&1 || :
-    /sbin/service virtlogd reload > /dev/null 2>&1 || :
-%endif
 fi
 
 %posttrans daemon
 if [ -f %{_localstatedir}/lib/rpm-state/libvirt/restart ]; then
-%if %{with_systemd}
     /bin/systemctl try-restart libvirtd.service >/dev/null 2>&1 || :
-%else
-    /sbin/service libvirtd condrestart > /dev/null 2>&1 || :
-%endif
 fi
 rm -rf %{_localstatedir}/lib/rpm-state/libvirt || :
 
@@ -1629,11 +1447,7 @@ fi
 
 %posttrans daemon-config-network
 if [ -f %{_localstatedir}/lib/rpm-state/libvirt/restart ]; then
-%if %{with_systemd}
     /bin/systemctl try-restart libvirtd.service >/dev/null 2>&1 || :
-%else
-    /sbin/service libvirtd condrestart > /dev/null 2>&1 || :
-%endif
 fi
 rm -rf %{_localstatedir}/lib/rpm-state/libvirt || :
 
@@ -1645,16 +1459,11 @@ touch %{_localstatedir}/lib/rpm-state/libvirt/restart || :
 
 %posttrans daemon-config-nwfilter
 if [ -f %{_localstatedir}/lib/rpm-state/libvirt/restart ]; then
-%if %{with_systemd}
     /bin/systemctl try-restart libvirtd.service >/dev/null 2>&1 || :
-%else
-    /sbin/service libvirtd condrestart > /dev/null 2>&1 || :
-%endif
 fi
 rm -rf %{_localstatedir}/lib/rpm-state/libvirt || :
 
 
-%if %{with_systemd}
 %triggerun -- libvirt < 0.9.4
 %{_bindir}/systemd-sysv-convert --save libvirtd >/dev/null 2>&1 ||:
 
@@ -1664,7 +1473,6 @@ rm -rf %{_localstatedir}/lib/rpm-state/libvirt || :
 # Run these because the SysV package being removed won't do them
 /sbin/chkconfig --del libvirtd >/dev/null 2>&1 || :
 /bin/systemctl try-restart libvirtd.service >/dev/null 2>&1 || :
-%endif
 
 %if %{with_qemu}
 %pre daemon-driver-qemu
@@ -1685,35 +1493,18 @@ exit 0
 
 %preun client
 
-%if %{with_systemd}
-    %if %{with_systemd_macros}
-        %systemd_preun libvirt-guests.service
-    %endif
-%else
-if [ $1 = 0 ]; then
-    /sbin/chkconfig --del libvirt-guests
-    rm -f /var/lib/libvirt/libvirt-guests
-fi
-%endif
+%systemd_preun libvirt-guests.service
 
 %post client
 
 /sbin/ldconfig
-%if %{with_systemd}
-    %if %{with_systemd_macros}
-        %systemd_post libvirt-guests.service
-    %endif
-%else
-/sbin/chkconfig --add libvirt-guests
-%endif
+%systemd_post libvirt-guests.service
 
 %postun client
 
 /sbin/ldconfig
-%if %{with_systemd}
-    %if %{with_systemd_macros}
-        %systemd_postun libvirt-guests.service
-    %endif
+%systemd_postun libvirt-guests.service
+
 %triggerun client -- libvirt < 0.9.4
 %{_bindir}/systemd-sysv-convert --save libvirt-guests >/dev/null 2>&1 ||:
 
@@ -1722,7 +1513,6 @@ fi
 
 # Run this because the SysV package being removed won't do them
 /sbin/chkconfig --del libvirt-guests >/dev/null 2>&1 || :
-%endif
 
 %if %{with_sanlock}
 %post lock-sanlock
@@ -1766,7 +1556,6 @@ exit 0
 
 %dir %attr(0700, root, root) %{_sysconfdir}/libvirt/
 
-%if %{with_systemd}
 %{_unitdir}/libvirtd.service
 %{_unitdir}/virt-guest-shutdown.target
 %{_unitdir}/virtlogd.service
@@ -1775,11 +1564,6 @@ exit 0
 %{_unitdir}/virtlockd.service
 %{_unitdir}/virtlockd.socket
 %{_unitdir}/virtlockd-admin.socket
-%else
-%{_sysconfdir}/rc.d/init.d/libvirtd
-%{_sysconfdir}/rc.d/init.d/virtlogd
-%{_sysconfdir}/rc.d/init.d/virtlockd
-%endif
 %config(noreplace) %{_sysconfdir}/sysconfig/libvirtd
 %config(noreplace) %{_sysconfdir}/sysconfig/virtlogd
 %config(noreplace) %{_sysconfdir}/sysconfig/virtlockd
@@ -2036,17 +1820,11 @@ exit 0
 %endif
 
 
-%if %{with_systemd}
 %{_unitdir}/libvirt-guests.service
-%else
-%{_sysconfdir}/rc.d/init.d/libvirt-guests
-%endif
 %config(noreplace) %{_sysconfdir}/sysconfig/libvirt-guests
 %attr(0755, root, root) %{_libexecdir}/libvirt-guests.sh
 
 %files libs -f %{name}.lang
-# RHEL6 doesn't have 'license' macro
-%{!?_licensedir:%global license %%doc}
 %license COPYING COPYING.LESSER
 %config(noreplace) %{_sysconfdir}/libvirt/libvirt.conf
 %config(noreplace) %{_sysconfdir}/libvirt/libvirt-admin.conf
