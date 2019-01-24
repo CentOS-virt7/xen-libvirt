@@ -216,7 +216,7 @@
 Summary: Library providing a simple virtualization API
 Name: libvirt
 Version: 4.10.0
-Release: 3.xen410%{?dist}%{?extra_release}
+Release: 3.xen412%{?dist}%{?extra_release}
 Epoch: 1
 License: LGPLv2+
 URL: https://libvirt.org/
@@ -1926,6 +1926,9 @@ exit 0
 
 
 %changelog
+* Thu Jan 24 2019 Anthony PERARD <anthony.perard@citrix.com> - 4.10.0-3.xen412
+- New build for Xen 4.12
+
 * Fri Jan 11 2019 Anthony PERARD <anthony.perard@citrix.com> - 4.10.0-3.xen410
 - fix dependencies, add epoch numbers
 
