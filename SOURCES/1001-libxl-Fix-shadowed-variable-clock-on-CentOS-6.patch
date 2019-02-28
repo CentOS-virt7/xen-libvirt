@@ -1,4 +1,4 @@
-From 496a20c006286a668e1cc045b54f1547bac9c734 Mon Sep 17 00:00:00 2001
+From e789c1d0d274e94d29c441981e165fc764394dbc Mon Sep 17 00:00:00 2001
 From: Anthony PERARD <anthony.perard@citrix.com>
 Date: Wed, 9 May 2018 15:50:03 +0100
 Subject: [PATCH] libxl: Fix shadowed variable 'clock' on CentOS 6
@@ -14,18 +14,18 @@ Signed-off-by: Anthony PERARD <anthony.perard@citrix.com>
  1 file changed, 12 insertions(+), 12 deletions(-)
 
 diff --git a/src/libxl/libxl_conf.c b/src/libxl/libxl_conf.c
-index ea2b0c5..d117055 100644
+index 452a77f3b8..05857922a1 100644
 --- a/src/libxl/libxl_conf.c
 +++ b/src/libxl/libxl_conf.c
-@@ -274,7 +274,7 @@ libxlMakeDomBuildInfo(virDomainDefPtr def,
+@@ -273,7 +273,7 @@ libxlMakeDomBuildInfo(virDomainDefPtr def,
                        virCapsPtr caps,
                        libxl_domain_config *d_config)
  {
 -    virDomainClockDef clock = def->clock;
 +    virDomainClockDef clockdef = def->clock;
+     libxl_ctx *ctx = cfg->ctx;
      libxl_domain_build_info *b_info = &d_config->b_info;
      int hvm = def->os.type == VIR_DOMAIN_OSTYPE_HVM;
-     size_t i;
 @@ -294,11 +294,11 @@ libxlMakeDomBuildInfo(virDomainDefPtr def,
      for (i = 0; i < virDomainDefGetVcpus(def); i++)
          libxl_bitmap_set((&b_info->avail_vcpus), i);
