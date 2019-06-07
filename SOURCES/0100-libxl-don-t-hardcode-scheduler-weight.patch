@@ -1,0 +1,284 @@
+From 67b8ecca2e066a51872515efea9303cd49982143 Mon Sep 17 00:00:00 2001
+From: Jim Fehlig <jfehlig@suse.com>
+Date: Thu, 22 Feb 2018 11:52:56 -0700
+Subject: [PATCH] libxl: don't hardcode scheduler weight
+
+Long ago in commit dfa1e1dd53 the scheduler weight was accidentally
+hardcoded to 1000. Weight is a setting with no unit since it is
+relative to the weight of other domains. If no weight is specified,
+libxl defaults to 256.
+
+Instead of hardcoding the weight to 1000, honor any <shares> specified
+in <cputune>. libvirt's notion of shares is synonomous to libxl's
+scheduler weight setting. If shares is unspecified, defer default
+weight setting to libxl.
+
+Removing the hardcoded weight required some test fixup. While at it,
+add an explicit test for <shares> conversion to scheduler weight.
+
+Signed-off-by: Jim Fehlig <jfehlig@suse.com>
+Reviewed-by: John Ferlan <jferlan@redhat.com>
+(cherry picked from commit 83edaf4435f9c2d1fa5afd1dfbb1643b4f564fd1)
+---
+ src/libxl/libxl_conf.c                        |  4 +-
+ tests/libxlxml2domconfigdata/basic-hvm.json   |  2 +-
+ tests/libxlxml2domconfigdata/basic-pv.json    |  2 +-
+ .../cpu-shares-hvm.json                       | 89 +++++++++++++++++++
+ .../libxlxml2domconfigdata/cpu-shares-hvm.xml | 39 ++++++++
+ .../libxlxml2domconfigdata/moredevs-hvm.json  |  2 +-
+ tests/libxlxml2domconfigdata/multiple-ip.json |  2 +-
+ .../variable-clock-hvm.json                   |  2 +-
+ tests/libxlxml2domconfigdata/vnuma-hvm.json   |  2 +-
+ tests/libxlxml2domconfigtest.c                |  1 +
+ 10 files changed, 138 insertions(+), 7 deletions(-)
+ create mode 100644 tests/libxlxml2domconfigdata/cpu-shares-hvm.json
+ create mode 100644 tests/libxlxml2domconfigdata/cpu-shares-hvm.xml
+
+diff --git a/src/libxl/libxl_conf.c b/src/libxl/libxl_conf.c
+index ea2b0c588f..0ed914e4f1 100644
+--- a/src/libxl/libxl_conf.c
++++ b/src/libxl/libxl_conf.c
+@@ -366,7 +366,9 @@ libxlMakeDomBuildInfo(virDomainDefPtr def,
+         }
+     }
+ 
+-    b_info->sched_params.weight = 1000;
++    if (def->cputune.sharesSpecified)
++        b_info->sched_params.weight = def->cputune.shares;
++
+     /* Xen requires the memory sizes to be rounded to 1MiB increments */
+     virDomainDefSetMemoryTotal(def,
+                                VIR_ROUND_UP(virDomainDefGetMemoryInitial(def), 1024));
+diff --git a/tests/libxlxml2domconfigdata/basic-hvm.json b/tests/libxlxml2domconfigdata/basic-hvm.json
+index 6fa41f34f9..ccd5853854 100644
+--- a/tests/libxlxml2domconfigdata/basic-hvm.json
++++ b/tests/libxlxml2domconfigdata/basic-hvm.json
+@@ -19,7 +19,7 @@
+         "device_model_version": "qemu_xen",
+         "device_model": "/bin/true",
+         "sched_params": {
+-            "weight": 1000
++
+         },
+         "type.hvm": {
+             "pae": "True",
+diff --git a/tests/libxlxml2domconfigdata/basic-pv.json b/tests/libxlxml2domconfigdata/basic-pv.json
+index 7e1abd3d6a..0f846daabd 100644
+--- a/tests/libxlxml2domconfigdata/basic-pv.json
++++ b/tests/libxlxml2domconfigdata/basic-pv.json
+@@ -15,7 +15,7 @@
+         "max_memkb": 524288,
+         "target_memkb": 524288,
+         "sched_params": {
+-            "weight": 1000
++
+         },
+         "type.pv": {
+             "bootloader": "pygrub"
+diff --git a/tests/libxlxml2domconfigdata/cpu-shares-hvm.json b/tests/libxlxml2domconfigdata/cpu-shares-hvm.json
+new file mode 100644
+index 0000000000..2e647eada2
+--- /dev/null
++++ b/tests/libxlxml2domconfigdata/cpu-shares-hvm.json
+@@ -0,0 +1,89 @@
++{
++    "c_info": {
++        "type": "hvm",
++        "name": "test-hvm",
++        "uuid": "2147d599-9cc6-c0dc-92ab-4064b5446e9b"
++    },
++    "b_info": {
++        "max_vcpus": 4,
++        "avail_vcpus": [
++            0,
++            1,
++            2,
++            3
++        ],
++        "max_memkb": 1048576,
++        "target_memkb": 1048576,
++        "video_memkb": 8192,
++        "shadow_memkb": 12288,
++        "device_model_version": "qemu_xen",
++        "device_model": "/bin/true",
++        "sched_params": {
++            "weight": 1500
++        },
++        "type.hvm": {
++            "pae": "True",
++            "apic": "True",
++            "acpi": "True",
++            "vga": {
++                "kind": "cirrus"
++            },
++            "vnc": {
++                "enable": "True",
++                "listen": "0.0.0.0",
++                "findunused": "False"
++            },
++            "sdl": {
++                "enable": "False"
++            },
++            "spice": {
++
++            },
++            "boot": "c",
++            "rdm": {
++
++            }
++        },
++        "arch_arm": {
++
++        }
++    },
++    "disks": [
++        {
++            "pdev_path": "/var/lib/xen/images/test-hvm.img",
++            "vdev": "hda",
++            "backend": "qdisk",
++            "format": "raw",
++            "removable": 1,
++            "readwrite": 1
++        }
++    ],
++    "nics": [
++        {
++            "devid": 0,
++            "mac": "00:16:3e:66:12:b4",
++            "bridge": "br0",
++            "script": "/etc/xen/scripts/vif-bridge",
++            "nictype": "vif_ioemu"
++        }
++    ],
++    "vfbs": [
++        {
++	    "devid": -1,
++            "vnc": {
++                "enable": "True",
++                "listen": "0.0.0.0",
++                "findunused": "False"
++            },
++            "sdl": {
++                "enable": "False"
++            }
++        }
++    ],
++    "vkbs": [
++        {
++            "devid": -1
++        }
++    ],
++    "on_reboot": "restart"
++}
+diff --git a/tests/libxlxml2domconfigdata/cpu-shares-hvm.xml b/tests/libxlxml2domconfigdata/cpu-shares-hvm.xml
+new file mode 100644
+index 0000000000..49085b4b70
+--- /dev/null
++++ b/tests/libxlxml2domconfigdata/cpu-shares-hvm.xml
+@@ -0,0 +1,39 @@
++<domain type='xen'>
++  <name>test-hvm</name>
++  <description>None</description>
++  <uuid>2147d599-9cc6-c0dc-92ab-4064b5446e9b</uuid>
++  <memory>1048576</memory>
++  <currentMemory>1048576</currentMemory>
++  <vcpu>4</vcpu>
++  <cputune>
++    <shares>1500</shares>
++  </cputune>
++  <on_poweroff>destroy</on_poweroff>
++  <on_reboot>restart</on_reboot>
++  <on_crash>destroy</on_crash>
++  <clock offset='utc'/>
++  <os>
++    <type>hvm</type>
++    <loader>/usr/lib/xen/boot/hvmloader</loader>
++    <boot dev='hd'/>
++  </os>
++  <features>
++    <apic/>
++    <acpi/>
++    <pae/>
++  </features>
++  <devices>
++    <emulator>/bin/true</emulator>
++    <disk type='file' device='disk'>
++      <driver name='qemu'/>
++      <source file='/var/lib/xen/images/test-hvm.img'/>
++      <target dev='hda'/>
++    </disk>
++    <interface type='bridge'>
++      <source bridge='br0'/>
++      <mac address='00:16:3e:66:12:b4'/>
++      <script path='/etc/xen/scripts/vif-bridge'/>
++    </interface>
++    <graphics type='vnc' port='-1' autoport='yes' listen='0.0.0.0'/>
++  </devices>
++</domain>
+diff --git a/tests/libxlxml2domconfigdata/moredevs-hvm.json b/tests/libxlxml2domconfigdata/moredevs-hvm.json
+index 8f861f34ec..7bfd68bd67 100644
+--- a/tests/libxlxml2domconfigdata/moredevs-hvm.json
++++ b/tests/libxlxml2domconfigdata/moredevs-hvm.json
+@@ -21,7 +21,7 @@
+         "device_model_version": "qemu_xen",
+         "device_model": "/bin/true",
+         "sched_params": {
+-            "weight": 1000
++
+         },
+         "type.hvm": {
+             "pae": "True",
+diff --git a/tests/libxlxml2domconfigdata/multiple-ip.json b/tests/libxlxml2domconfigdata/multiple-ip.json
+index 4aff61d4b5..80dca82611 100644
+--- a/tests/libxlxml2domconfigdata/multiple-ip.json
++++ b/tests/libxlxml2domconfigdata/multiple-ip.json
+@@ -15,7 +15,7 @@
+         "max_memkb": 524288,
+         "target_memkb": 524288,
+         "sched_params": {
+-            "weight": 1000
++
+         },
+         "type.pv": {
+             "bootloader": "pygrub"
+diff --git a/tests/libxlxml2domconfigdata/variable-clock-hvm.json b/tests/libxlxml2domconfigdata/variable-clock-hvm.json
+index 49d0a4330c..69be9c64cb 100644
+--- a/tests/libxlxml2domconfigdata/variable-clock-hvm.json
++++ b/tests/libxlxml2domconfigdata/variable-clock-hvm.json
+@@ -21,7 +21,7 @@
+         "device_model_version": "qemu_xen",
+         "device_model": "/bin/true",
+         "sched_params": {
+-            "weight": 1000
++
+         },
+         "type.hvm": {
+             "pae": "True",
+diff --git a/tests/libxlxml2domconfigdata/vnuma-hvm.json b/tests/libxlxml2domconfigdata/vnuma-hvm.json
+index 3a5071e148..3b2fc5f40f 100644
+--- a/tests/libxlxml2domconfigdata/vnuma-hvm.json
++++ b/tests/libxlxml2domconfigdata/vnuma-hvm.json
+@@ -107,7 +107,7 @@
+         "device_model_version": "qemu_xen",
+         "device_model": "/bin/true",
+         "sched_params": {
+-            "weight": 1000
++
+         },
+         "type.hvm": {
+             "pae": "True",
+diff --git a/tests/libxlxml2domconfigtest.c b/tests/libxlxml2domconfigtest.c
+index ea3d2884ef..6eec4c752d 100644
+--- a/tests/libxlxml2domconfigtest.c
++++ b/tests/libxlxml2domconfigtest.c
+@@ -192,6 +192,7 @@ mymain(void)
+ 
+     DO_TEST("basic-pv");
+     DO_TEST("basic-hvm");
++    DO_TEST("cpu-shares-hvm");
+     DO_TEST("variable-clock-hvm");
+     DO_TEST("moredevs-hvm");
+     DO_TEST("vnuma-hvm");
+-- 
+Anthony PERARD
+

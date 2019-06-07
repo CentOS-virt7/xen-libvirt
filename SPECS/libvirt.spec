@@ -241,7 +241,7 @@
 Summary: Library providing a simple virtualization API
 Name: libvirt
 Version: 4.1.0
-Release: 2.xen48%{?dist}%{?extra_release}
+Release: 3.xen48%{?dist}%{?extra_release}
 License: LGPLv2+
 Group: Development/Libraries
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root
@@ -253,6 +253,7 @@ ExclusiveArch: x86_64 aarch64
 %endif
 Source: https://libvirt.org/sources/%{?mainturl}libvirt-%{version}.tar.xz
 Patch1: 0001-tests-force-use-of-NORMAL-TLS-priority-in-test-suite.patch
+Patch100: 0100-libxl-don-t-hardcode-scheduler-weight.patch
 
 # Build fix
 Patch1001: 1001-libxl-Fix-shadowed-variable-clock-on-CentOS-6.patch
@@ -2194,6 +2195,9 @@ exit 0
 
 
 %changelog
+* Fri Jun 07 2019 Anthony PERARD <anthony.perard@citrix.com> - 4.1.0-3.xen48
+- Backport "libxl: don't hardcode scheduler weight"
+
 * Wed May 09 2018 Anthony PERARD <anthony.perard@citrix.com> - 4.1.0-2.xen48.el7
 - Import libvirt-4.1.0-2.fc28
 
