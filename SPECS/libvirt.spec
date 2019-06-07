@@ -18,6 +18,7 @@
 %{!?enable_autotools:%global enable_autotools 0}
 
 # The hypervisor drivers that run in libvirtd
+%define with_xen           0%{!?_without_xen:1}
 %define with_qemu          0%{!?_without_qemu:1}
 %define with_lxc           0%{!?_without_lxc:1}
 %define with_uml           0%{!?_without_uml:1}
@@ -95,6 +96,7 @@
 
 # Xen is available only on x86_64 and aarch64
 %ifnarch %{ix86} x86_64 ia64 aarch64
+    %define with_xen 0
     %define with_libxl 0
 %endif
 
@@ -238,8 +240,8 @@
 
 Summary: Library providing a simple virtualization API
 Name: libvirt
-Version: 4.3.0
-Release: 1.xen48%{?dist}%{?extra_release}
+Version: 4.1.0
+Release: 2.xen48%{?dist}%{?extra_release}
 License: LGPLv2+
 Group: Development/Libraries
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root
@@ -250,6 +252,7 @@ ExclusiveArch: x86_64 aarch64
     %define mainturl stable_updates/
 %endif
 Source: https://libvirt.org/sources/%{?mainturl}libvirt-%{version}.tar.xz
+Patch1: 0001-tests-force-use-of-NORMAL-TLS-priority-in-test-suite.patch
 
 # Build fix
 Patch1001: 1001-libxl-Fix-shadowed-variable-clock-on-CentOS-6.patch
@@ -268,6 +271,9 @@ Requires: libvirt-daemon-driver-qemu = %{version}-%{release}
 %endif
 %if %{with_uml}
 Requires: libvirt-daemon-driver-uml = %{version}-%{release}
+%endif
+%if %{with_xen}
+Requires: libvirt-daemon-driver-xen = %{version}-%{release}
 %endif
 %if %{with_vbox}
 Requires: libvirt-daemon-driver-vbox = %{version}-%{release}
@@ -301,7 +307,7 @@ BuildRequires: python
 %if %{with_systemd}
 BuildRequires: systemd-units
 %endif
-%if %{with_libxl}
+%if %{with_xen} || %{with_libxl}
 BuildRequires: xen-devel
 %endif
 BuildRequires: libxml2-devel
@@ -364,7 +370,7 @@ BuildRequires: libacl-devel
 # From QEMU RPMs
 BuildRequires: /usr/bin/qemu-img
 %else
-    %if %{with_libxl}
+    %if %{with_xen}
     %ifnarch aarch64
 # From Xen RPMs
 BuildRequires: /usr/sbin/qcow-create
@@ -624,7 +630,7 @@ Requires: util-linux
 # From QEMU RPMs
 Requires: /usr/bin/qemu-img
 %else
-    %if %{with_libxl}
+    %if %{with_xen}
 # From Xen RPMs
         %ifnarch aarch64
 Requires: /usr/sbin/qcow-create
@@ -834,6 +840,19 @@ User Mode Linux
 %endif
 
 
+%if %{with_xen}
+%package daemon-driver-xen
+Summary: Xen driver plugin for the libvirtd daemon
+Group: Development/Libraries
+Requires: libvirt-daemon = %{version}-%{release}
+
+%description daemon-driver-xen
+The Xen driver plugin for the libvirtd daemon, providing
+an implementation of the hypervisor driver APIs using
+Xen
+%endif
+
+
 %if %{with_vbox}
 %package daemon-driver-vbox
 Summary: VirtualBox driver plugin for the libvirtd daemon
@@ -944,12 +963,15 @@ capabilities of UML
 %endif
 
 
-%if %{with_libxl}
+%if %{with_xen} || %{with_libxl}
 %package daemon-xen
 Summary: Server side daemon & driver required to run XEN guests
 Group: Development/Libraries
 
 Requires: libvirt-daemon = %{version}-%{release}
+    %if %{with_xen}
+Requires: libvirt-daemon-driver-xen = %{version}-%{release}
+    %endif
     %if %{with_libxl}
 Requires: libvirt-daemon-driver-libxl = %{version}-%{release}
     %endif
@@ -1142,6 +1164,12 @@ rm -rf .git
 %if ! %{supported_platform}
 echo "This RPM requires either Fedora >= %{min_fedora} or RHEL >= %{min_rhel}"
 exit 1
+%endif
+
+%if %{with_xen}
+    %define arg_xen --with-xen
+%else
+    %define arg_xen --without-xen
 %endif
 
 %if %{with_qemu}
@@ -1971,6 +1999,12 @@ exit 0
 %{_libdir}/%{name}/connection-driver/libvirt_driver_uml.so
 %endif
 
+%if %{with_xen}
+%files daemon-driver-xen
+%dir %attr(0700, root, root) %{_localstatedir}/lib/libvirt/xen/
+%{_libdir}/%{name}/connection-driver/libvirt_driver_xen.so
+%endif
+
 %if %{with_libxl}
 %files daemon-driver-libxl
 %config(noreplace) %{_sysconfdir}/libvirt/libxl.conf
@@ -2005,7 +2039,7 @@ exit 0
 %files daemon-uml
 %endif
 
-%if %{with_libxl}
+%if %{with_xen} || %{with_libxl}
 %files daemon-xen
 %endif
 
@@ -2160,9 +2194,6 @@ exit 0
 
 
 %changelog
-* Thu Feb 28 2019 Anthony PERARD <anthony.perard@citrix.com> - 4.3.0-1.xen48.el6
-- Update to libvirt 4.3.0
-
 * Wed May 09 2018 Anthony PERARD <anthony.perard@citrix.com> - 4.1.0-2.xen48.el7
 - Import libvirt-4.1.0-2.fc28
 

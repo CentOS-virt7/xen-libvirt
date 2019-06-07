@@ -1,0 +1,69 @@
+From ec92abee2851344e4e8c108a26b5cec594561ff4 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Daniel=20P=2E=20Berrang=C3=A9?= <berrange@redhat.com>
+Date: Mon, 5 Mar 2018 12:46:16 +0000
+Subject: [PATCH] tests: force use of "NORMAL" TLS priority in test suite
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+When generating certificates we rely on GNUTLS' built-in default setup
+for the ciphers used in the certs. We then currently run with the distro
+specific TLS priority setup which can be much stronger, to the extent
+that the certificates we generate are considered untrustworthy. We don't
+care about the quality of the ciphers we use in the test suite, so just
+force the priority to "NORMAL" which should ensure our certs are
+accepted by GNUTLS.
+
+Signed-off-by: Daniel P. Berrangé <berrange@redhat.com>
+---
+ tests/virnettlscontexttest.c | 4 ++--
+ tests/virnettlssessiontest.c | 4 ++--
+ 2 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/tests/virnettlscontexttest.c b/tests/virnettlscontexttest.c
+index 089c10e964..86647f3014 100644
+--- a/tests/virnettlscontexttest.c
++++ b/tests/virnettlscontexttest.c
+@@ -72,7 +72,7 @@ static int testTLSContextInit(const void *opaque)
+                                          data->crt,
+                                          KEYFILE,
+                                          NULL,
+-                                         NULL,
++                                         "NORMAL",
+                                          true,
+                                          true);
+     } else {
+@@ -80,7 +80,7 @@ static int testTLSContextInit(const void *opaque)
+                                          NULL,
+                                          data->crt,
+                                          KEYFILE,
+-                                         NULL,
++                                         "NORMAL",
+                                          true,
+                                          true);
+     }
+diff --git a/tests/virnettlssessiontest.c b/tests/virnettlssessiontest.c
+index 6d639e5b16..7e85607181 100644
+--- a/tests/virnettlssessiontest.c
++++ b/tests/virnettlssessiontest.c
+@@ -113,7 +113,7 @@ static int testTLSSessionInit(const void *opaque)
+                                            data->servercrt,
+                                            KEYFILE,
+                                            data->wildcards,
+-                                           NULL,
++                                           "NORMAL",
+                                            false,
+                                            true);
+ 
+@@ -121,7 +121,7 @@ static int testTLSSessionInit(const void *opaque)
+                                            NULL,
+                                            data->clientcrt,
+                                            KEYFILE,
+-                                           NULL,
++                                           "NORMAL",
+                                            false,
+                                            true);
+ 
+-- 
+2.14.3
+
