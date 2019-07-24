@@ -15,12 +15,11 @@
 # Default to skipping autoreconf.  Distros can change just this one line
 # (or provide a command-line override) if they backport any patches that
 # touch configure.ac or Makefile.am.
-%{!?enable_autotools:%global enable_autotools 0}
+%{!?enable_autotools:%global enable_autotools 1}
 
 # The hypervisor drivers that run in libvirtd
 %define with_qemu          0%{!?_without_qemu:1}
 %define with_lxc           0%{!?_without_lxc:1}
-%define with_uml           0%{!?_without_uml:1}
 %define with_libxl         0%{!?_without_libxl:1}
 %define with_vbox          0%{!?_without_vbox:1}
 
@@ -83,6 +82,7 @@
 %define with_sanlock       0%{!?_without_sanlock:0}
 %define with_numad         0%{!?_without_numad:0}
 %define with_firewalld     0%{!?_without_firewalld:0}
+%define with_firewalld_zone 0%{!?_without_firewalld_zone:0}
 %define with_libssh2       0%{!?_without_libssh2:0}
 %define with_wireshark     0%{!?_without_wireshark:0}
 %define with_libssh        0%{!?_without_libssh:0}
@@ -117,13 +117,12 @@
     %endif
 %endif
 
-# RHEL doesn't ship OpenVZ, VBox, UML, PowerHypervisor,
+# RHEL doesn't ship OpenVZ, VBox, PowerHypervisor,
 # VMware, libxenserver (xenapi), libxenlight (Xen 4.1 and newer),
 # or HyperV.
 %if 0%{?rhel}
     %define with_openvz 0
     %define with_vbox 0
-    %define with_uml 0
     %define with_phyp 0
     %define with_vmware 0
     %define with_xenapi 0
@@ -136,6 +135,11 @@
 %endif
 
 %define with_firewalld 1
+
+%if 0%{?fedora} >= 31 || 0%{?rhel} > 7
+    %define with_firewalld_zone 0%{!?_without_firewalld_zone:1}
+%endif
+
 
 # fuse is used to provide virtualized /proc for LXC
 %if %{with_lxc}
@@ -161,11 +165,7 @@
 # Enable wireshark plugins for all distros shipping libvirt 1.2.2 or newer
 %if 0%{?fedora}
     %define with_wireshark 0%{!?_without_wireshark:1}
-%endif
-%if 0%{?fedora} || 0%{?rhel} > 7
-    %define wireshark_plugindir %(pkg-config --variable plugindir wireshark)
-%else
-    %define wireshark_plugindir %{_libdir}/wireshark/plugins
+    %define wireshark_plugindir %(pkg-config --variable plugindir wireshark)/epan
 %endif
 
 # Enable libssh transport for new enough distros
@@ -183,7 +183,7 @@
 %endif
 
 
-%if %{with_qemu} || %{with_lxc} || %{with_uml}
+%if %{with_qemu} || %{with_lxc}
 # numad is used to manage the CPU and memory placement dynamically,
 # it's not available on many non-x86 architectures.
     %ifnarch s390 s390x %{arm} riscv64
@@ -215,8 +215,8 @@
 
 Summary: Library providing a simple virtualization API
 Name: libvirt
-Version: 4.10.0
-Release: 3.xen410%{?dist}%{?extra_release}
+Version: 5.1.0
+Release: 9.xen410%{?dist}%{?extra_release}
 Epoch: 1
 License: LGPLv2+
 URL: https://libvirt.org/
@@ -225,6 +225,55 @@ URL: https://libvirt.org/
     %define mainturl stable_updates/
 %endif
 Source: https://libvirt.org/sources/%{?mainturl}libvirt-%{version}.tar.xz
+
+# Fix use of deprecated RBD features
+Patch0001: 0001-storage-split-off-code-for-calling-rbd_list.patch
+Patch0002: 0002-storage-add-support-for-new-rbd_list2-method.patch
+# Don't require ipv6 firewall support at startup (bz #1688968)
+Patch0003: 0003-network-improve-error-report-when-firewall-chain-cre.patch
+Patch0004: 0004-network-split-setup-of-ipv4-and-ipv6-top-level-chain.patch
+# Avoid using firewalld if unprivileged
+Patch0005: 0005-network-avoid-trying-to-create-global-firewall-rules.patch
+# Mouse cursor doubled on QEMU VNC on ppc64le (bz #1565253)
+Patch0006: 0006-qemu-Allow-creating-ppc64-guests-with-graphics-and-n.patch
+# Fix VM startup with cgroupv2 (bz #1688736)
+Patch0007: 0007-util-implement-virCgroupV2-Set-Get-CpusetMems.patch
+Patch0008: 0008-util-implement-virCgroupV2-Set-Get-CpusetMemoryMigra.patch
+Patch0009: 0009-util-implement-virCgroupV2-Set-Get-CpusetCpus.patch
+Patch0010: 0010-util-enable-cgroups-v2-cpuset-controller-for-threads.patch
+# Define md-clear CPUID bit (CVE-2018-12126, CVE-2018-12127, CVE-2018-12130,
+# CVE-2019-11091)
+Patch0011: 0011-cpu_x86-Do-not-cache-microcode-version.patch
+Patch0012: 0012-qemu-Don-t-cache-microcode-version.patch
+Patch0013: 0013-cputest-Add-data-for-Intel-R-Xeon-R-CPU-E3-1225-v5.patch
+Patch0014: 0014-cpu_map-Define-md-clear-CPUID-bit.patch
+# Fix systemd socket permissions (CVE-2019-10132)
+Patch0015: 0015-admin-reject-clients-unless-their-UID-matches-the-cu.patch
+Patch0016: 0016-locking-restrict-sockets-to-mode-0600.patch
+Patch0017: 0017-logging-restrict-sockets-to-mode-0600.patch
+# CVE-2019-10161: arbitrary file read/exec via virDomainSaveImageGetXMLDesc
+# API (bz #1722463, bz #1720115)
+Patch0018: 0018-api-disallow-virDomainSaveImageGetXMLDesc-on-read-on.patch
+# CVE-2019-10166: virDomainManagedSaveDefineXML API exposed to readonly
+# clients (bz #1722462, bz #1720114)
+Patch0019: 0019-api-disallow-virDomainManagedSaveDefineXML-on-read-o.patch
+# CVE-2019-10167: arbitrary command execution via
+# virConnectGetDomainCapabilities API (bz #1722464, bz #1720117)
+Patch0020: 0020-api-disallow-virConnectGetDomainCapabilities-on-read.patch
+# CVE-2019-10168: arbitrary command execution via
+# virConnectBaselineHypervisorCPU and virConnectCompareHypervisorCPU APIs (bz
+# #1722466, bz #1720118)
+Patch0021: 0021-api-disallow-virConnect-HypervisorCPU-on-read-only-c.patch
+# CVE-2019-3886: virsh domhostname command discloses guest hostname in
+# readonly mode [fedora-rawhide
+Patch0022: 0022-api-disallow-virDomainGetHostname-for-read-only-conn.patch
+Patch0023: 0023-remote-enforce-ACL-write-permission-for-getting-gues.patch
+# Cannot start VM with a CBR 2.0 TPM device (bz #1712556)
+Patch0024: 0024-qemu-Set-up-EMULATOR-thread-and-cpuset.mems-before-e.patch
+# libvirtd does not update VM .xml configurations after virsh
+# snapshot/blockcommit (bz #1722348)
+Patch0025: 0025-qemu-blockjob-Fix-saving-of-inactive-XML-after-compl.patch
+
 
 Requires: libvirt-daemon = %{epoch}:%{version}-%{release}
 Requires: libvirt-daemon-config-network = %{epoch}:%{version}-%{release}
@@ -238,9 +287,9 @@ Requires: libvirt-daemon-driver-lxc = %{epoch}:%{version}-%{release}
 %if %{with_qemu}
 Requires: libvirt-daemon-driver-qemu = %{epoch}:%{version}-%{release}
 %endif
-%if %{with_uml}
-Requires: libvirt-daemon-driver-uml = %{epoch}:%{version}-%{release}
-%endif
+# We had UML driver, but we've removed it.
+Obsoletes: libvirt-daemon-driver-uml <= 5.0.0
+Obsoletes: libvirt-daemon-uml <= 5.0.0
 %if %{with_vbox}
 Requires: libvirt-daemon-driver-vbox = %{epoch}:%{version}-%{release}
 %endif
@@ -327,6 +376,8 @@ BuildRequires: libiscsi-devel
 BuildRequires: parted-devel
 # For Multipath support
 BuildRequires: device-mapper-devel
+# For XFS reflink clone support
+BuildRequires: xfsprogs-devel
 %if %{with_storage_rbd}
 BuildRequires: librados2-devel
 BuildRequires: librbd1-devel
@@ -386,7 +437,7 @@ BuildRequires: numad
 %endif
 
 %if %{with_wireshark}
-BuildRequires: wireshark-devel >= 2.1.0
+BuildRequires: wireshark-devel >= 2.4.0
 %endif
 
 %if %{with_libssh}
@@ -396,6 +447,10 @@ BuildRequires: libssh-devel >= 0.7.0
 %if 0%{?fedora} || 0%{?rhel} > 7
 BuildRequires: rpcgen
 BuildRequires: libtirpc-devel
+%endif
+
+%if %{with_firewalld_zone}
+BuildRequires: firewalld-filesystem
 %endif
 
 Provides: bundled(gnulib)
@@ -544,6 +599,9 @@ Requires: util-linux
 %if %{with_qemu}
 # From QEMU RPMs
 Requires: /usr/bin/qemu-img
+%endif
+%if !%{with_storage_rbd}
+Obsoletes: libvirt-daemon-driver-storage-rbd < %{version}-%{release}
 %endif
 
 %description daemon-driver-storage-core
@@ -750,19 +808,6 @@ the Linux kernel
 %endif
 
 
-%if %{with_uml}
-%package daemon-driver-uml
-Summary: Uml driver plugin for the libvirtd daemon
-Requires: libvirt-daemon = %{epoch}:%{version}-%{release}
-Requires: libvirt-libs = %{epoch}:%{version}-%{release}
-
-%description daemon-driver-uml
-The UML driver plugin for the libvirtd daemon, providing
-an implementation of the hypervisor driver APIs using
-User Mode Linux
-%endif
-
-
 %if %{with_vbox}
 %package daemon-driver-vbox
 Summary: VirtualBox driver plugin for the libvirtd daemon
@@ -847,26 +892,6 @@ Requires: libvirt-daemon-driver-storage = %{epoch}:%{version}-%{release}
 %description daemon-lxc
 Server side daemon and driver required to manage the virtualization
 capabilities of LXC
-%endif
-
-
-%if %{with_uml}
-%package daemon-uml
-Summary: Server side daemon & driver required to run UML guests
-
-Requires: libvirt-daemon = %{epoch}:%{version}-%{release}
-Requires: libvirt-daemon-driver-uml = %{epoch}:%{version}-%{release}
-Requires: libvirt-daemon-driver-interface = %{epoch}:%{version}-%{release}
-Requires: libvirt-daemon-driver-network = %{epoch}:%{version}-%{release}
-Requires: libvirt-daemon-driver-nodedev = %{epoch}:%{version}-%{release}
-Requires: libvirt-daemon-driver-nwfilter = %{epoch}:%{version}-%{release}
-Requires: libvirt-daemon-driver-secret = %{epoch}:%{version}-%{release}
-Requires: libvirt-daemon-driver-storage = %{epoch}:%{version}-%{release}
-# There are no UML kernel RPMs in Fedora/RHEL to depend on.
-
-%description daemon-uml
-Server side daemon and driver required to manage the virtualization
-capabilities of UML
 %endif
 
 
@@ -961,7 +986,7 @@ Bash completion script stub.
 %if %{with_wireshark}
 %package wireshark
 Summary: Wireshark dissector plugin for libvirt RPC transactions
-Requires: wireshark >= 1.12.6-4
+Requires: wireshark >= 2.4.0
 Requires: %{name}-libs = %{epoch}:%{version}-%{release}
 
 %description wireshark
@@ -1075,12 +1100,6 @@ exit 1
     %define arg_vmware --without-vmware
 %endif
 
-%if %{with_uml}
-    %define arg_uml --with-uml
-%else
-    %define arg_uml --without-uml
-%endif
-
 %if %{with_storage_rbd}
     %define arg_storage_rbd --with-storage-rbd
 %else
@@ -1133,6 +1152,12 @@ exit 1
     %define arg_firewalld --with-firewalld
 %else
     %define arg_firewalld --without-firewalld
+%endif
+
+%if %{with_firewalld_zone}
+    %define arg_firewalld_zone --with-firewalld-zone
+%else
+    %define arg_firewalld_zone --without-firewalld-zone
 %endif
 
 %if %{with_wireshark}
@@ -1194,7 +1219,6 @@ rm -f po/stamp-po
            --with-avahi \
            --with-polkit \
            --with-libvirtd \
-           %{?arg_uml} \
            %{?arg_phyp} \
            %{?arg_esx} \
            %{?arg_hyperv} \
@@ -1234,6 +1258,7 @@ rm -f po/stamp-po
            --with-dtrace \
            --with-driver-modules \
            %{?arg_firewalld} \
+           %{?arg_firewalld_zone} \
            %{?arg_wireshark} \
            --without-pm-utils \
            --with-nss-plugin \
@@ -1323,9 +1348,6 @@ rm -rf $RPM_BUILD_ROOT%{_sysconfdir}/logrotate.d/libvirtd.libxl
 rm -f $RPM_BUILD_ROOT%{_datadir}/augeas/lenses/libvirtd_libxl.aug
 rm -f $RPM_BUILD_ROOT%{_datadir}/augeas/lenses/tests/test_libvirtd_libxl.aug
 %endif
-%if ! %{with_uml}
-rm -rf $RPM_BUILD_ROOT%{_sysconfdir}/logrotate.d/libvirtd.uml
-%endif
 
 # Copied into libvirt-docs subpackage eventually
 mv $RPM_BUILD_ROOT%{_datadir}/doc/libvirt-%{version} libvirt-docs
@@ -1403,6 +1425,16 @@ if [ -f %{_localstatedir}/lib/rpm-state/libvirt/restart ]; then
     /bin/systemctl try-restart libvirtd.service >/dev/null 2>&1 || :
 fi
 rm -rf %{_localstatedir}/lib/rpm-state/libvirt || :
+
+%post daemon-driver-network
+%if %{with_firewalld_zone}
+    %firewalld_reload
+%endif
+
+%postun daemon-driver-network
+%if %{with_firewalld_zone}
+    %firewalld_reload
+%endif
 
 %post daemon-config-network
 if test $1 -eq 1 && test ! -f %{_sysconfdir}/libvirt/qemu/networks/default.xml ; then
@@ -1493,17 +1525,12 @@ exit 0
 %endif
 
 %preun client
-
 %systemd_preun libvirt-guests.service
 
 %post client
-
-/sbin/ldconfig
 %systemd_post libvirt-guests.service
 
 %postun client
-
-/sbin/ldconfig
 %systemd_postun libvirt-guests.service
 
 %triggerun client -- libvirt < 0.9.4
@@ -1642,6 +1669,10 @@ exit 0
 %attr(0755, root, root) %{_libexecdir}/libvirt_leaseshelper
 %{_libdir}/%{name}/connection-driver/libvirt_driver_network.so
 
+%if %{with_firewalld_zone}
+%{_prefix}/lib/firewalld/zones/libvirt.xml
+%endif
+
 %files daemon-driver-nodedev
 %{_libdir}/%{name}/connection-driver/libvirt_driver_nodedev.so
 
@@ -1732,15 +1763,6 @@ exit 0
 %{_libdir}/%{name}/connection-driver/libvirt_driver_lxc.so
 %endif
 
-%if %{with_uml}
-%files daemon-driver-uml
-%dir %attr(0700, root, root) %{_localstatedir}/log/libvirt/uml/
-%config(noreplace) %{_sysconfdir}/logrotate.d/libvirtd.uml
-%ghost %dir %{_localstatedir}/run/libvirt/uml/
-%dir %attr(0700, root, root) %{_localstatedir}/lib/libvirt/uml/
-%{_libdir}/%{name}/connection-driver/libvirt_driver_uml.so
-%endif
-
 %if %{with_libxl}
 %files daemon-driver-libxl
 %config(noreplace) %{_sysconfdir}/libvirt/libxl.conf
@@ -1769,10 +1791,6 @@ exit 0
 
 %if %{with_lxc}
 %files daemon-lxc
-%endif
-
-%if %{with_uml}
-%files daemon-uml
 %endif
 
 %if %{with_libxl}
@@ -1926,12 +1944,63 @@ exit 0
 
 
 %changelog
-* Fri Jan 11 2019 Anthony PERARD <anthony.perard@citrix.com> - 4.10.0-3.xen410
-- fix dependencies, add epoch numbers
+* Thu Jun 20 2019 Cole Robinson <crobinso@redhat.com> - 5.1.0-9
+- CVE-2019-10161: arbitrary file read/exec via virDomainSaveImageGetXMLDesc
+  API (bz #1722463, bz #1720115)
+- CVE-2019-10166: virDomainManagedSaveDefineXML API exposed to readonly
+  clients (bz #1722462, bz #1720114)
+- CVE-2019-10167: arbitrary command execution via
+  virConnectGetDomainCapabilities API (bz #1722464, bz #1720117)
+- CVE-2019-10168: arbitrary command execution via
+  virConnectBaselineHypervisorCPU and virConnectCompareHypervisorCPU APIs (bz
+  #1722466, bz #1720118)
+- CVE-2019-3886: virsh domhostname command discloses guest hostname in
+  readonly mode [fedora-rawhide
+- Cannot start VM with a CBR 2.0 TPM device (bz #1712556)
+- libvirtd does not update VM .xml configurations after virsh
+  snapshot/blockcommit (bz #1722348)
 
-* Wed Jan 09 2019 Anthony PERARD <anthony.perard@citrix.com> - 4.10.0-2.xen410
-- Import libvirt-4.10.0-2.fc30
-- Also bump Epoch to avoid issue when CentOS's libvirt package is updated
+* Fri May 31 2019 Adam Williamson <awilliam@redhat.com> - 5.1.0-8
+- Fix scriptlet error when built without firewalld zone support
+
+* Wed May 29 2019 Adam Williamson <awilliam@redhat.com> - 5.1.0-7
+- Pass --without-firewalld-zone to configure
+- Resolves: rhbz #1699051
+
+* Tue May 21 2019 Daniel P. Berrangé <berrange@redhat.com> - 5.1.0-6
+- Fix systemd socket permissions
+- Resolves: rhbz #1712498 (CVE-2019-10132)
+
+* Tue May 14 2019 Daniel P. Berrangé <berrange@redhat.com> - 5.1.0-5
+- Define md-clear CPUID bit
+- Resolves: rhbz #1709977 (CVE-2018-12126), rhbz #1709979 (CVE-2018-12127),
+  rhbz #1709997 (CVE-2018-12130), rhbz #1709984 (CVE-2019-11091)
+
+* Tue Apr 02 2019 Cole Robinson <crobinso@redhat.com> - 5.1.0-4
+- Mouse cursor doubled on QEMU VNC on ppc64le (bz #1565253)
+- Fix VM startup with cgroupv2 (bz #1688736)
+
+* Wed Mar 20 2019 Daniel P. Berrangé <berrange@redhat.com> - 5.1.0-3
+- Fix upgrades for rbd on i686 (rhbz #1688121)
+- Add missing xfsprogs-devel dep
+- Fix use of deprecated RBD features
+- Avoid using firewalld if unprivileged
+- Don't require ipv6 firewall support at startup (rhbz #1688968)
+
+* Wed Mar 06 2019 Igor Gnatenko <ignatenkobrain@fedoraproject.org> - 5.1.0-2
+- Remove obsolete scriptlets
+
+* Mon Mar  4 2019 Daniel P. Berrangé <berrange@redhat.com> - 5.1.0-1
+- Update to 5.1.0 release
+
+* Sun Feb 17 2019 Igor Gnatenko <ignatenkobrain@fedoraproject.org> - 5.0.0-3
+- Rebuild for readline 8.0
+
+* Fri Feb 01 2019 Fedora Release Engineering <releng@fedoraproject.org> - 5.0.0-2
+- Rebuilt for https://fedoraproject.org/wiki/Fedora_30_Mass_Rebuild
+
+* Mon Jan 21 2019 Daniel P. Berrangé <berrange@redhat.com> - 5.0.0-1
+- Update to 5.0.0 release
 
 * Mon Dec 10 2018 Daniel P. Berrangé <berrange@redhat.com> - 4.10.0-2
 - Disable RBD on 32-bit arches (rhbz #1657928)
@@ -1987,51 +2056,3 @@ exit 0
 
 * Fri Jan 19 2018 Daniel P. Berrange <berrange@redhat.com> - 4.0.0-1
 - Rebase to version 4.0.0
-
-* Wed Dec 20 2017 Cole Robinson <crobinso@redhat.com> - 3.10.0-2
-- Rebuild for xen 4.10
-
-* Tue Dec  5 2017 Daniel P. Berrange <berrange@redhat.com> - 3.10.0-1
-- Rebase to version 3.10.0
-
-* Fri Nov  3 2017 Daniel P. Berrange <berrange@redhat.com> - 3.9.0-1
-- Rebase to version 3.9.0
-
-* Wed Oct  4 2017 Daniel P. Berrange <berrange@redhat.com> - 3.8.0-1
-- Rebase to version 3.8.0
-
-* Mon Sep  4 2017 Daniel P. Berrange <berrange@redhat.com> - 3.7.0-1
-- Rebase to version 3.7.0
-
-* Wed Aug  2 2017 Daniel P. Berrange <berrange@redhat.com> - 3.6.0-1
-- Rebase to version 3.6.0
-
-* Sun Jul 30 2017 Florian Weimer <fweimer@redhat.com> - 3.5.0-4
-- Rebuild with binutils fix for ppc64le (#1475636)
-
-* Tue Jul 25 2017 Daniel P. Berrange <berrange@redhat.com> - 3.5.0-3
-- Disabled RBD on i386, arm, ppc64 (rhbz #1474743)
-
-* Mon Jul 17 2017 Cole Robinson <crobinso@redhat.com> - 3.5.0-2
-- Rebuild for xen 4.9
-
-* Thu Jul  6 2017 Daniel P. Berrange <berrange@redhat.com> - 3.5.0-1
-- Rebase to version 3.5.0
-
-* Fri Jun  2 2017 Daniel P. Berrange <berrange@redhat.com> - 3.4.0-1
-- Rebase to version 3.4.0
-
-* Mon May  8 2017 Daniel P. Berrange <berrange@redhat.com> - 3.3.0-1
-- Rebase to version 3.3.0
-
-* Mon Apr  3 2017 Daniel P. Berrange <berrange@redhat.com> - 3.2.0-1
-- Rebase to version 3.2.0
-
-* Fri Mar  3 2017 Daniel P. Berrange <berrange@redhat.com> - 3.1.0-1
-- Rebase to version 3.1.0
-
-* Fri Feb 10 2017 Fedora Release Engineering <releng@fedoraproject.org> - 3.0.0-2
-- Rebuilt for https://fedoraproject.org/wiki/Fedora_26_Mass_Rebuild
-
-* Thu Jan 19 2017 Daniel P. Berrange <berrange@redhat.com> - 3.0.0-1
-- Rebase to version 3.0.0
