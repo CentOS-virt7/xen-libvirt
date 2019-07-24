@@ -1,0 +1,32 @@
+From: =?UTF-8?q?Daniel=20P=2E=20Berrang=C3=A9?= <berrange@redhat.com>
+Date: Wed, 27 Mar 2019 10:59:58 +0000
+Subject: [PATCH] api: disallow virDomainGetHostname for read-only connections
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The virDomainGetHostname API is fetching guest information and this may
+involve use of an untrusted guest agent. As such its use must be
+forbidden on a read-only connection to libvirt.
+
+Fixes CVE-2019-3886
+Reviewed-by: Jim Fehlig <jfehlig@suse.com>
+Signed-off-by: Daniel P. Berrangé <berrange@redhat.com>
+(cherry picked from commit 2a07c990bd9143d7a0fe8d1b6b7c763c52185240)
+---
+ src/libvirt-domain.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/src/libvirt-domain.c b/src/libvirt-domain.c
+index f7b834dfa6..c9bff31af5 100644
+--- a/src/libvirt-domain.c
++++ b/src/libvirt-domain.c
+@@ -11025,6 +11025,8 @@ virDomainGetHostname(virDomainPtr domain, unsigned int flags)
+     virCheckDomainReturn(domain, NULL);
+     conn = domain->conn;
+ 
++    virCheckReadOnlyGoto(domain->conn->flags, error);
++
+     if (conn->driver->domainGetHostname) {
+         char *ret;
+         ret = conn->driver->domainGetHostname(domain, flags);

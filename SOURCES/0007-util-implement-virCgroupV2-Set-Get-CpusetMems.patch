@@ -1,0 +1,53 @@
+From: Pavel Hrdina <phrdina@redhat.com>
+Date: Tue, 19 Feb 2019 15:42:51 +0100
+Subject: [PATCH] util: implement virCgroupV2(Set|Get)CpusetMems
+
+Signed-off-by: Pavel Hrdina <phrdina@redhat.com>
+(cherry picked from commit 74e7da060543a87610b42fc6ba26a45b0a6e3974)
+---
+ src/util/vircgroupv2.c | 25 +++++++++++++++++++++++++
+ 1 file changed, 25 insertions(+)
+
+diff --git a/src/util/vircgroupv2.c b/src/util/vircgroupv2.c
+index e0fa8e1cc0..4cfbd52f2d 100644
+--- a/src/util/vircgroupv2.c
++++ b/src/util/vircgroupv2.c
+@@ -1561,6 +1561,28 @@ virCgroupV2GetCpuacctStat(virCgroupPtr group,
+ }
+ 
+ 
++static int
++virCgroupV2SetCpusetMems(virCgroupPtr group,
++                         const char *mems)
++{
++    return virCgroupSetValueStr(group,
++                                VIR_CGROUP_CONTROLLER_CPUSET,
++                                "cpuset.mems",
++                                mems);
++}
++
++
++static int
++virCgroupV2GetCpusetMems(virCgroupPtr group,
++                         char **mems)
++{
++    return virCgroupGetValueStr(group,
++                                VIR_CGROUP_CONTROLLER_CPUSET,
++                                "cpuset.mems",
++                                mems);
++}
++
++
+ virCgroupBackend virCgroupV2Backend = {
+     .type = VIR_CGROUP_BACKEND_TYPE_V2,
+ 
+@@ -1620,6 +1642,9 @@ virCgroupBackend virCgroupV2Backend = {
+ 
+     .getCpuacctUsage = virCgroupV2GetCpuacctUsage,
+     .getCpuacctStat = virCgroupV2GetCpuacctStat,
++
++    .setCpusetMems = virCgroupV2SetCpusetMems,
++    .getCpusetMems = virCgroupV2GetCpusetMems,
+ };
+ 
+ 

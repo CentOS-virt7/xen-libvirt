@@ -1,0 +1,50 @@
+From: Pavel Hrdina <phrdina@redhat.com>
+Date: Tue, 19 Feb 2019 15:53:34 +0100
+Subject: [PATCH] util: implement virCgroupV2(Set|Get)CpusetMemoryMigrate
+
+Cgroups v2 don't have memory_migrate interface and the migration is
+enabled by default.
+
+Signed-off-by: Pavel Hrdina <phrdina@redhat.com>
+(cherry picked from commit 77c1cf4da2f761a91756c09fa4fd37ae1802e650)
+---
+ src/util/vircgroupv2.c | 19 +++++++++++++++++++
+ 1 file changed, 19 insertions(+)
+
+diff --git a/src/util/vircgroupv2.c b/src/util/vircgroupv2.c
+index 4cfbd52f2d..f3aa6ebc48 100644
+--- a/src/util/vircgroupv2.c
++++ b/src/util/vircgroupv2.c
+@@ -1583,6 +1583,23 @@ virCgroupV2GetCpusetMems(virCgroupPtr group,
+ }
+ 
+ 
++static int
++virCgroupV2SetCpusetMemoryMigrate(virCgroupPtr group ATTRIBUTE_UNUSED,
++                                  bool migrate ATTRIBUTE_UNUSED)
++{
++    return 0;
++}
++
++
++static int
++virCgroupV2GetCpusetMemoryMigrate(virCgroupPtr group ATTRIBUTE_UNUSED,
++                                  bool *migrate)
++{
++    *migrate = true;
++    return 0;
++}
++
++
+ virCgroupBackend virCgroupV2Backend = {
+     .type = VIR_CGROUP_BACKEND_TYPE_V2,
+ 
+@@ -1645,6 +1662,8 @@ virCgroupBackend virCgroupV2Backend = {
+ 
+     .setCpusetMems = virCgroupV2SetCpusetMems,
+     .getCpusetMems = virCgroupV2GetCpusetMems,
++    .setCpusetMemoryMigrate = virCgroupV2SetCpusetMemoryMigrate,
++    .getCpusetMemoryMigrate = virCgroupV2GetCpusetMemoryMigrate,
+ };
+ 
+ 
