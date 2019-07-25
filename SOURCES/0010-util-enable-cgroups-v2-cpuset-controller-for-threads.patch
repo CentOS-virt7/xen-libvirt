@@ -1,0 +1,30 @@
+From: Pavel Hrdina <phrdina@redhat.com>
+Date: Wed, 20 Feb 2019 13:50:23 +0100
+Subject: [PATCH] util: enable cgroups v2 cpuset controller for threads
+
+When we create cgroup for qemu threads we need to enable cpuset
+controller in order to use it.
+
+Signed-off-by: Pavel Hrdina <phrdina@redhat.com>
+(cherry picked from commit a6aedcf39bd3212a3cd624b765bb724fd36d6a8a)
+---
+ src/util/vircgroupv2.c | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/src/util/vircgroupv2.c b/src/util/vircgroupv2.c
+index 25afab1cad..4084929c5a 100644
+--- a/src/util/vircgroupv2.c
++++ b/src/util/vircgroupv2.c
+@@ -400,6 +400,12 @@ virCgroupV2MakeGroup(virCgroupPtr parent ATTRIBUTE_UNUSED,
+                                             VIR_CGROUP_CONTROLLER_CPU) < 0) {
+                 return -1;
+             }
++
++            if (virCgroupV2HasController(parent, VIR_CGROUP_CONTROLLER_CPUSET) &&
++                virCgroupV2EnableController(parent,
++                                            VIR_CGROUP_CONTROLLER_CPUSET) < 0) {
++                return -1;
++            }
+         } else {
+             size_t i;
+             for (i = 0; i < VIR_CGROUP_CONTROLLER_LAST; i++) {

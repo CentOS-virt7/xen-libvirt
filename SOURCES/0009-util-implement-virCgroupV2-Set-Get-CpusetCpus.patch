@@ -1,0 +1,52 @@
+From: Pavel Hrdina <phrdina@redhat.com>
+Date: Tue, 19 Feb 2019 15:55:38 +0100
+Subject: [PATCH] util: implement virCgroupV2(Set|Get)CpusetCpus
+
+Signed-off-by: Pavel Hrdina <phrdina@redhat.com>
+(cherry picked from commit 3b72c84ff1c1b8b393ba9c2ccb004f8eb1ebda95)
+---
+ src/util/vircgroupv2.c | 24 ++++++++++++++++++++++++
+ 1 file changed, 24 insertions(+)
+
+diff --git a/src/util/vircgroupv2.c b/src/util/vircgroupv2.c
+index f3aa6ebc48..25afab1cad 100644
+--- a/src/util/vircgroupv2.c
++++ b/src/util/vircgroupv2.c
+@@ -1600,6 +1600,28 @@ virCgroupV2GetCpusetMemoryMigrate(virCgroupPtr group ATTRIBUTE_UNUSED,
+ }
+ 
+ 
++static int
++virCgroupV2SetCpusetCpus(virCgroupPtr group,
++                         const char *cpus)
++{
++    return virCgroupSetValueStr(group,
++                                VIR_CGROUP_CONTROLLER_CPUSET,
++                                "cpuset.cpus",
++                                cpus);
++}
++
++
++static int
++virCgroupV2GetCpusetCpus(virCgroupPtr group,
++                         char **cpus)
++{
++    return virCgroupGetValueStr(group,
++                                VIR_CGROUP_CONTROLLER_CPUSET,
++                                "cpuset.cpus",
++                                cpus);
++}
++
++
+ virCgroupBackend virCgroupV2Backend = {
+     .type = VIR_CGROUP_BACKEND_TYPE_V2,
+ 
+@@ -1664,6 +1686,8 @@ virCgroupBackend virCgroupV2Backend = {
+     .getCpusetMems = virCgroupV2GetCpusetMems,
+     .setCpusetMemoryMigrate = virCgroupV2SetCpusetMemoryMigrate,
+     .getCpusetMemoryMigrate = virCgroupV2GetCpusetMemoryMigrate,
++    .setCpusetCpus = virCgroupV2SetCpusetCpus,
++    .getCpusetCpus = virCgroupV2GetCpusetCpus,
+ };
+ 
+ 

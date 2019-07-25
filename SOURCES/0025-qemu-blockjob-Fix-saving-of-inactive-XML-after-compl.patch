@@ -1,0 +1,35 @@
+From: Peter Krempa <pkrempa@redhat.com>
+Date: Fri, 17 May 2019 10:15:53 +0200
+Subject: [PATCH] qemu: blockjob: Fix saving of inactive XML after completed
+ legacy blockjob
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Commit c257352797 introduced a logic bug where we will never save the
+inactive XML after a blockjob as the variable which was determining
+whether to do so is cleared right before. Thus even if we correctly
+modify the inactive state it will be rolled back when libvirtd is
+restarted.
+
+Reported-by: Thomas Stein <hello@himbee.re>
+Signed-off-by: Peter Krempa <pkrempa@redhat.com>
+Reviewed-by: Ján Tomko <jtomko@redhat.com>
+(cherry picked from commit 4d8cc5a07a0dcc0ac99377f66a4649d219705452)
+---
+ src/qemu/qemu_blockjob.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/qemu/qemu_blockjob.c b/src/qemu/qemu_blockjob.c
+index fa7e4c8625..f105632a09 100644
+--- a/src/qemu/qemu_blockjob.c
++++ b/src/qemu/qemu_blockjob.c
+@@ -363,7 +363,7 @@ qemuBlockJobEventProcessLegacy(virQEMUDriverPtr driver,
+     if (virDomainSaveStatus(driver->xmlopt, cfg->stateDir, vm, driver->caps) < 0)
+         VIR_WARN("Unable to save status on vm %s after block job", vm->def->name);
+ 
+-    if (job->newstate == VIR_DOMAIN_BLOCK_JOB_COMPLETED && vm->newDef) {
++    if (job->state == VIR_DOMAIN_BLOCK_JOB_COMPLETED && vm->newDef) {
+         if (virDomainSaveConfig(cfg->configDir, driver->caps, vm->newDef) < 0)
+             VIR_WARN("Unable to update persistent definition on vm %s "
+                      "after block job", vm->def->name);
