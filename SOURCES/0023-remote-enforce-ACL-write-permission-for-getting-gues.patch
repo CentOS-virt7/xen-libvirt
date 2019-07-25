@@ -1,0 +1,42 @@
+From: =?UTF-8?q?Daniel=20P=2E=20Berrang=C3=A9?= <berrange@redhat.com>
+Date: Wed, 27 Mar 2019 11:22:49 +0000
+Subject: [PATCH] remote: enforce ACL write permission for getting guest time &
+ hostname
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Getting the guest time and hostname both require use of guest agent
+commands. These must not be allowed for read-only users, so the
+permissions check must validate "write" permission not "read".
+
+Fixes CVE-2019-3886
+Reviewed-by: Jim Fehlig <jfehlig@suse.com>
+Signed-off-by: Daniel P. Berrangé <berrange@redhat.com>
+(cherry picked from commit ae076bb40e0e150aef41361b64001138d04d6c60)
+---
+ src/remote/remote_protocol.x | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/remote/remote_protocol.x b/src/remote/remote_protocol.x
+index a67aba6131..ff9e34a852 100644
+--- a/src/remote/remote_protocol.x
++++ b/src/remote/remote_protocol.x
+@@ -5504,7 +5504,7 @@ enum remote_procedure {
+ 
+     /**
+      * @generate: both
+-     * @acl: domain:read
++     * @acl: domain:write
+      */
+     REMOTE_PROC_DOMAIN_GET_HOSTNAME = 277,
+ 
+@@ -5899,7 +5899,7 @@ enum remote_procedure {
+ 
+     /**
+      * @generate: none
+-     * @acl: domain:read
++     * @acl: domain:write
+      */
+     REMOTE_PROC_DOMAIN_GET_TIME = 337,
+ 

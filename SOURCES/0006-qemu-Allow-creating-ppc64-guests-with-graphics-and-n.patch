@@ -1,0 +1,57 @@
+From: Andrea Bolognani <abologna@redhat.com>
+Date: Wed, 27 Feb 2019 18:41:35 +0100
+Subject: [PATCH] qemu: Allow creating ppc64 guests with graphics and no USB
+ mouse
+
+The existing behavior for ppc64 guests is to always add a USB
+keyboard and mouse combo if graphics are present; unfortunately,
+this means any attempt to use a USB tablet will cause both pointing
+devices to show up in the guest, which in turn will result in poor
+user experience.
+
+We can't just stop adding the USB mouse or start adding a USB tablet
+instead, because existing applications and users might rely on the
+current behavior; however, we can avoid adding the USB mouse if a USB
+tablet is already present, thus allowing users and applications to
+create guests that contain a single pointing device.
+
+https://bugzilla.redhat.com/show_bug.cgi?id=1683681
+
+Signed-off-by: Andrea Bolognani <abologna@redhat.com>
+Reviewed-by: Cole Robinson <crobinso@redhat.com>
+(cherry picked from commit 186bb479d0f409dc75175bea48a760838c479a6c)
+---
+ src/qemu/qemu_domain.c | 20 ++++++++++++++++++++
+ 1 file changed, 20 insertions(+)
+
+diff --git a/src/qemu/qemu_domain.c b/src/qemu/qemu_domain.c
+index 59fe1eb401..915795ab84 100644
+--- a/src/qemu/qemu_domain.c
++++ b/src/qemu/qemu_domain.c
+@@ -3476,6 +3476,26 @@ qemuDomainDefAddDefaultDevices(virDomainDefPtr def,
+         virQEMUCapsGet(qemuCaps, QEMU_CAPS_VIRTIO_S390) && def->memballoon)
+         def->memballoon->model = VIR_DOMAIN_MEMBALLOON_MODEL_NONE;
+ 
++    if (addDefaultUSBMouse) {
++        bool hasUSBTablet = false;
++        size_t j;
++
++        for (j = 0; j < def->ninputs; j++) {
++            if (def->inputs[j]->type == VIR_DOMAIN_INPUT_TYPE_TABLET &&
++                def->inputs[j]->bus == VIR_DOMAIN_INPUT_BUS_USB) {
++                hasUSBTablet = true;
++                break;
++            }
++        }
++
++        /* Historically, we have automatically added USB keyboard and
++         * mouse to some guests. While the former device is generally
++         * safe to have, adding the latter is undesiderable if a USB
++         * tablet is already present in the guest */
++        if (hasUSBTablet)
++            addDefaultUSBMouse = false;
++    }
++
+     if (addDefaultUSBKBD &&
+         def->ngraphics > 0 &&
+         virDomainDefMaybeAddInput(def,
