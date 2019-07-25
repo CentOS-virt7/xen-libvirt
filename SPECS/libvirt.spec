@@ -1944,6 +1944,9 @@ exit 0
 
 
 %changelog
+* Thu Jul 25 2019 Anthony PERARD <anthony.perard@citrix.com> - 5.1.0-9.xen48
+- Import libvirt-5.1.0-9.fc30
+
 * Thu Jun 20 2019 Cole Robinson <crobinso@redhat.com> - 5.1.0-9
 - CVE-2019-10161: arbitrary file read/exec via virDomainSaveImageGetXMLDesc
   API (bz #1722463, bz #1720115)
