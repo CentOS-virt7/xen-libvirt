@@ -1,0 +1,109 @@
+From 13969ca54f5c04d0a4a13e52269de47640348171 Mon Sep 17 00:00:00 2001
+From: Laine Stump <laine@laine.org>
+Date: Wed, 25 Apr 2018 17:12:03 -0400
+Subject: [PATCH 01/15] nwfilter: increase pcap buffer size to be compatible
+ with TPACKET_V3
+
+When an nwfilter rule sets the parameter CTRL_IP_LEARNING to "dhcp",
+this turns on the "dhcpsnoop" thread, which uses libpcap to monitor
+traffic on the domain's tap device and extract the IP address from the
+DHCP response.
+
+If libpcap on the host is built with HAVE_TPACKET3 defined (to enable
+support for TPACKET_V3), the dhcpsnoop code's initialization of the
+libpcap socket would fail with the following error:
+
+  virNWFilterSnoopDHCPOpen:1134 : internal error: pcap_setfilter: can't remove kernel filter: Bad file descriptor
+
+It turns out that this was because TPACKET_V3 requires a larger buffer
+size than libvirt was setting (we were setting it to 128k). Changing
+the buffer size to 256k eliminates the error, and the dhcpsnoop thread
+once again works properly.
+
+A fuller explanation of why TPACKET_V3 requires such a large buffer,
+for future git spelunkers:
+
+libpcap calls setsockopt(... SOL_PACKET, PACKET_RX_RING...) to setup a
+ring buffer for receiving packets; two of the attributes sent to this
+API are called tp_frame_size, and tp_frame_nr. If libpcap was built
+with HAVE_TPACKET3 defined, tp_trame_size is set to MAXIMUM_SNAPLEN
+(defined in libpcap sources as 262144) and tp_frame_nr is set to:
+
+ [the buffer size we set, i.e. PCAP_BUFFERSIZE i.e. 262144] / tp_frame_size.
+
+So if PCAP_BUFFERSIZE < MAXIMUM_SNAPLEN, then tp_frame_nr (the number
+of frames in the ring buffer) is 0, which is nonsensical. This same
+value is later used as a multiplier to determine the size for a call
+to malloc() (which would also fail).
+
+(NB: if HAVE_TPACKET3 is *not* defined, then tp_frame_size is set to
+the snaplen set by the user (in our case 576) plus a small amount to
+account for ethernet headers, so 256k is far more than adequate)
+
+Since the TPACKET_V3 code in libpcap actually reads multiple packets
+into each frame, it's not a problem to have only a single frame
+(especially when we are monitoring such infrequent traffic), so it's
+okay to set this relatively small buffer size (in comparison to the
+default, which is 2MB), which is important since every guest using
+dhcp snooping in a nwfilter rule will hold 2 of these buffers for the
+entire life of the guest.
+
+Thanks to Christian Ehrhardt for discovering that buffer size was the
+problem (this was not at all obvious from the error that was logged!)
+
+Resolves: https://bugzilla.redhat.com/1547237
+Fixes: https://bugs.launchpad.net/libvirt/+bug/1758037
+
+Signed-off-by: Laine Stump <laine@laine.org>
+Reviewed-by: Christian Ehrhardt <christian.ehrhardt@canonical.com> (V1)
+Reviewed-by: John Ferlan <jferlan@redhat.com>
+Tested-by: Christian Ehrhardt <christian.ehrhardt@canonical.com>
+(cherry picked from commit ce5aebeacd10a1c15cb3ee46a59c8b5ff235589e)
+---
+ src/nwfilter/nwfilter_dhcpsnoop.c | 22 +++++++++++++++++++---
+ 1 file changed, 19 insertions(+), 3 deletions(-)
+
+diff --git a/src/nwfilter/nwfilter_dhcpsnoop.c b/src/nwfilter/nwfilter_dhcpsnoop.c
+index 6069e70460..50cfb944a2 100644
+--- a/src/nwfilter/nwfilter_dhcpsnoop.c
++++ b/src/nwfilter/nwfilter_dhcpsnoop.c
+@@ -256,10 +256,21 @@ struct _virNWFilterDHCPDecodeJob {
+ # define DHCP_BURST_INTERVAL_S  10 /* sec */
+ 
+ /*
+- * libpcap 1.5 requires a 128kb buffer
+- * 128 kb is bigger than (DHCP_PKT_BURST * PCAP_PBUFSIZE / 2)
++ * NB: Any libpcap built with HAVE_TPACKET3 will require
++ * PCAP_BUFFERSIZE to be at least 262144 (although
++ * pcap_set_buffer_size() with a lower value will succeed, and the
++ * error will only show up later when pcap_setfilter() is called).
++ *
++ * It is possible that in the future libpcap could increase the
++ * minimum size even further, but due to the fact that each guest
++ * using dhcp snooping keeps 2 pcap sockets open (and thus 2 buffers
++ * allocated) for the life of the guest, we want to minimize the
++ * length of the buffer, so instead of leaving it at the default size
++ * (2MB), we are setting it to the minimum viable size and including
++ * this clue in the source to help quickly resolve the problem when/if
++ * it reoccurs.
+  */
+-# define PCAP_BUFFERSIZE        (128 * 1024)
++# define PCAP_BUFFERSIZE        (256 * 1024)
+ 
+ # define MAX_QUEUED_JOBS        (DHCP_PKT_BURST + 2 * DHCP_PKT_RATE)
+ 
+@@ -1114,6 +1125,11 @@ virNWFilterSnoopDHCPOpen(const char *ifname, virMacAddr *mac,
+         goto cleanup_nohandle;
+     }
+ 
++    /* IMPORTANT: If there is any failure of *any* pcap_* function
++     * during setup of the socket, look to the comment where
++     * PCAP_BUFFERSIZE is defined. It may be too small, even if the
++     * generated error doesn't imply that.
++     */
+     if (pcap_set_snaplen(handle, PCAP_PBUFSIZE) < 0 ||
+         pcap_set_buffer_size(handle, PCAP_BUFFERSIZE) < 0 ||
+         pcap_activate(handle) < 0) {
+-- 
+Anthony PERARD
+

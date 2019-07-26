@@ -1,0 +1,36 @@
+From 585be8edbef5ce4ef30e6c20386358ca1ba8e344 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?J=C3=A1n=20Tomko?= <jtomko@redhat.com>
+Date: Fri, 14 Jun 2019 09:16:14 +0200
+Subject: [PATCH 15/15] api: disallow virConnectGetDomainCapabilities on
+ read-only connections
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+This API can be used to execute arbitrary emulators.
+Forbid it on read-only connections.
+
+Fixes: CVE-2019-10167
+Signed-off-by: Ján Tomko <jtomko@redhat.com>
+Reviewed-by: Daniel P. Berrangé <berrange@redhat.com>
+(cherry picked from commit 8afa68bac0cf99d1f8aaa6566685c43c22622f26)
+Signed-off-by: Ján Tomko <jtomko@redhat.com>
+---
+ src/libvirt-domain.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/libvirt-domain.c b/src/libvirt-domain.c
+index dd6b1a5475..2f496bc90f 100644
+--- a/src/libvirt-domain.c
++++ b/src/libvirt-domain.c
+@@ -11216,6 +11216,7 @@ virConnectGetDomainCapabilities(virConnectPtr conn,
+     virResetLastError();
+ 
+     virCheckConnectReturn(conn, NULL);
++    virCheckReadOnlyGoto(conn->flags, error);
+ 
+     if (conn->driver->connectGetDomainCapabilities) {
+         char *ret;
+-- 
+Anthony PERARD
+

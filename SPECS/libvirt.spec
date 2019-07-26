@@ -241,7 +241,7 @@
 Summary: Library providing a simple virtualization API
 Name: libvirt
 Version: 4.1.0
-Release: 3.xen48%{?dist}%{?extra_release}
+Release: 4.xen48%{?dist}%{?extra_release}
 License: LGPLv2+
 Group: Development/Libraries
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root
@@ -254,6 +254,20 @@ ExclusiveArch: x86_64 aarch64
 Source: https://libvirt.org/sources/%{?mainturl}libvirt-%{version}.tar.xz
 Patch1: 0001-tests-force-use-of-NORMAL-TLS-priority-in-test-suite.patch
 Patch100: 0100-libxl-don-t-hardcode-scheduler-weight.patch
+# Patches from upstream v4.1-maint branch
+Patch2: 0001-nwfilter-increase-pcap-buffer-size-to-be-compatible-.patch
+Patch3: 0002-cpu-define-the-ssbd-CPUID-feature-bit-CVE-2018-3639.patch
+Patch4: 0003-cpu-define-the-virt-ssbd-CPUID-feature-bit-CVE-2018-.patch
+Patch5: 0004-cpu_x86-Do-not-cache-microcode-version.patch
+Patch6: 0005-qemu-Don-t-cache-microcode-version.patch
+Patch7: 0006-cputest-Add-data-for-Intel-R-Xeon-R-CPU-E3-1225-v5.patch
+Patch8: 0007-cpu_map-Define-md-clear-CPUID-bit.patch
+Patch9: 0008-cputest-remove-stibp-flag-from-test-data.patch
+Patch10: 0010-admin-reject-clients-unless-their-UID-matches-the-cu.patch
+Patch11: 0013-api-disallow-virDomainSaveImageGetXMLDesc-on-read-on.patch
+Patch12: 0014-api-disallow-virDomainManagedSaveDefineXML-on-read-o.patch
+Patch13: 0015-api-disallow-virConnectGetDomainCapabilities-on-read.patch
+
 
 # Build fix
 Patch1001: 1001-libxl-Fix-shadowed-variable-clock-on-CentOS-6.patch
@@ -2195,6 +2209,11 @@ exit 0
 
 
 %changelog
+* Fri Jul 26 2019 Anthony PERARD <anthony.perard@citrix.com> - 4.1.0-4.xen48
+- Import fixes for https://access.redhat.com/errata/RHSA-2019:1579
+  (CVE-2019-10161, CVE-2019-10166, CVE-2019-10167, CVE-2019-10168)
+- Also import other fixes from the v4.1-maint upstream branch.
+
 * Fri Jun 07 2019 Anthony PERARD <anthony.perard@citrix.com> - 4.1.0-3.xen48
 - Backport "libxl: don't hardcode scheduler weight"
 
