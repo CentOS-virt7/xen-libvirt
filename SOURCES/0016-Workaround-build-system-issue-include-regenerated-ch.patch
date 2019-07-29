@@ -1,0 +1,128 @@
+From 0a25f726a44073de9cbf651897ac64d03754b9ac Mon Sep 17 00:00:00 2001
+From: Anthony PERARD <anthony.perard@citrix.com>
+Date: Mon, 29 Jul 2019 12:42:06 +0000
+Subject: [PATCH] Workaround build system issue, include regenerated changes
+
+When a change is done to src/remote/remote_protocol.x and applied to the
+libvirt release tarball, trying to build it on CentOS6 failed. At some
+point, make stop working and just use the CPU at 100% without doing
+anything else.
+---
+ docs/libvirt-api.xml           |    4 +---
+ docs/libvirt-refs.xml          |    6 ------
+ src/access/viraccessapicheck.c |   11 ++---------
+ src/access/viraccessapicheck.h |    2 +-
+ 4 files changed, 4 insertions(+), 19 deletions(-)
+
+diff --git a/docs/libvirt-api.xml b/docs/libvirt-api.xml
+index dfbc2d9..0c1f022 100644
+--- a/docs/libvirt-api.xml
++++ b/docs/libvirt-api.xml
+@@ -8554,9 +8554,7 @@ a saved state file was created.  @file must be a file created
+ previously by virDomainSave() or virDomainSaveFlags().
+ 
+ No security-sensitive data will be included unless @flags contains
+-VIR_DOMAIN_XML_SECURE; this flag is rejected on read-only
+-connections.  For this API, @flags should not contain either
+-VIR_DOMAIN_XML_INACTIVE or VIR_DOMAIN_XML_UPDATE_CPU.]]></info>
++VIR_DOMAIN_XML_SECURE.]]></info>
+       <return type='char *' info='a 0 terminated UTF-8 encoded XML instance, or NULL in case of error.  The caller must free() the returned value.'/>
+       <arg name='conn' type='virConnectPtr' info='pointer to the hypervisor connection'/>
+       <arg name='file' type='const char *' info='path to saved state file'/>
+diff --git a/docs/libvirt-refs.xml b/docs/libvirt-refs.xml
+index 8283660..7523b3e 100644
+--- a/docs/libvirt-refs.xml
++++ b/docs/libvirt-refs.xml
+@@ -9710,7 +9710,6 @@
+         <word name='VIR_DOMAIN_XML_INACTIVE'>
+           <ref name='virDomainGetXMLDesc'/>
+           <ref name='virDomainManagedSaveGetXMLDesc'/>
+-          <ref name='virDomainSaveImageGetXMLDesc'/>
+           <ref name='virDomainSnapshotGetXMLDesc'/>
+         </word>
+         <word name='VIR_DOMAIN_XML_SECURE'>
+@@ -9722,7 +9721,6 @@
+         <word name='VIR_DOMAIN_XML_UPDATE_CPU'>
+           <ref name='virDomainGetXMLDesc'/>
+           <ref name='virDomainManagedSaveGetXMLDesc'/>
+-          <ref name='virDomainSaveImageGetXMLDesc'/>
+           <ref name='virDomainSnapshotGetXMLDesc'/>
+         </word>
+         <word name='VIR_DUMP_BYPASS_CACHE'>
+@@ -12342,7 +12340,6 @@
+           <ref name='virDomainGetXMLDesc'/>
+           <ref name='virDomainManagedSaveGetXMLDesc'/>
+           <ref name='virDomainRevertToSnapshot'/>
+-          <ref name='virDomainSaveImageGetXMLDesc'/>
+           <ref name='virDomainSnapshotCreateXML'/>
+           <ref name='virDomainSnapshotGetXMLDesc'/>
+           <ref name='virEventRegisterDefaultImpl'/>
+@@ -12430,7 +12427,6 @@
+           <ref name='virDomainGetNumaParameters'/>
+           <ref name='virDomainManagedSaveGetXMLDesc'/>
+           <ref name='virDomainMigrateStartPostCopy'/>
+-          <ref name='virDomainSaveImageGetXMLDesc'/>
+           <ref name='virDomainSetPerfEvents'/>
+           <ref name='virDomainSetUserPassword'/>
+           <ref name='virDomainSetVcpu'/>
+@@ -19592,7 +19588,6 @@
+           <ref name='virDomainBlockCommit'/>
+           <ref name='virDomainGetXMLDesc'/>
+           <ref name='virDomainManagedSaveGetXMLDesc'/>
+-          <ref name='virDomainSaveImageGetXMLDesc'/>
+           <ref name='virDomainSnapshotGetXMLDesc'/>
+         </word>
+         <word name='read_bps'>
+@@ -19864,7 +19859,6 @@
+           <ref name='virDomainGetXMLDesc'/>
+           <ref name='virDomainListGetStats'/>
+           <ref name='virDomainManagedSaveGetXMLDesc'/>
+-          <ref name='virDomainSaveImageGetXMLDesc'/>
+           <ref name='virDomainSnapshotCreateXML'/>
+           <ref name='virDomainSnapshotGetXMLDesc'/>
+           <ref name='virStorageVolResize'/>
+diff --git a/src/access/viraccessapicheck.c b/src/access/viraccessapicheck.c
+index 369d637..4aece9e 100644
+--- a/src/access/viraccessapicheck.c
++++ b/src/access/viraccessapicheck.c
+@@ -4781,7 +4781,7 @@ int virDomainSaveImageDefineXMLEnsureACL(virConnectPtr conn, virDomainDefPtr dom
+ }
+ 
+ /* Returns: -1 on error/denied, 0 on allowed */
+-int virDomainSaveImageGetXMLDescEnsureACL(virConnectPtr conn, virDomainDefPtr domain, unsigned int flags)
++int virDomainSaveImageGetXMLDescEnsureACL(virConnectPtr conn, virDomainDefPtr domain)
+ {
+     virAccessManagerPtr mgr;
+     int rv;
+@@ -4790,14 +4790,7 @@ int virDomainSaveImageGetXMLDescEnsureACL(virConnectPtr conn, virDomainDefPtr do
+         return -1;
+     }
+ 
+-    if ((rv = virAccessManagerCheckDomain(mgr, conn->driver->name, domain, VIR_ACCESS_PERM_DOMAIN_READ)) <= 0) {
+-        virObjectUnref(mgr);
+-        if (rv == 0)
+-            virReportError(VIR_ERR_ACCESS_DENIED, NULL);
+-        return -1;
+-    }
+-    if (((flags & (VIR_DOMAIN_XML_SECURE)) == (VIR_DOMAIN_XML_SECURE)) &&
+-        (rv = virAccessManagerCheckDomain(mgr, conn->driver->name, domain, VIR_ACCESS_PERM_DOMAIN_READ_SECURE)) <= 0) {
++    if ((rv = virAccessManagerCheckDomain(mgr, conn->driver->name, domain, VIR_ACCESS_PERM_DOMAIN_WRITE)) <= 0) {
+         virObjectUnref(mgr);
+         if (rv == 0)
+             virReportError(VIR_ERR_ACCESS_DENIED, NULL);
+diff --git a/src/access/viraccessapicheck.h b/src/access/viraccessapicheck.h
+index e171bfa..40d51bd 100644
+--- a/src/access/viraccessapicheck.h
++++ b/src/access/viraccessapicheck.h
+@@ -235,7 +235,7 @@ extern int virDomainRevertToSnapshotEnsureACL(virConnectPtr conn, virDomainDefPt
+ extern int virDomainSaveEnsureACL(virConnectPtr conn, virDomainDefPtr domain);
+ extern int virDomainSaveFlagsEnsureACL(virConnectPtr conn, virDomainDefPtr domain);
+ extern int virDomainSaveImageDefineXMLEnsureACL(virConnectPtr conn, virDomainDefPtr domain);
+-extern int virDomainSaveImageGetXMLDescEnsureACL(virConnectPtr conn, virDomainDefPtr domain, unsigned int flags);
++extern int virDomainSaveImageGetXMLDescEnsureACL(virConnectPtr conn, virDomainDefPtr domain);
+ extern int virDomainScreenshotEnsureACL(virConnectPtr conn, virDomainDefPtr domain);
+ extern int virDomainSendKeyEnsureACL(virConnectPtr conn, virDomainDefPtr domain);
+ extern int virDomainSendProcessSignalEnsureACL(virConnectPtr conn, virDomainDefPtr domain);
+-- 
+1.7.1
+

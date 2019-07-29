@@ -267,6 +267,7 @@ Patch10: 0010-admin-reject-clients-unless-their-UID-matches-the-cu.patch
 Patch11: 0013-api-disallow-virDomainSaveImageGetXMLDesc-on-read-on.patch
 Patch12: 0014-api-disallow-virDomainManagedSaveDefineXML-on-read-o.patch
 Patch13: 0015-api-disallow-virConnectGetDomainCapabilities-on-read.patch
+Patch14: 0016-Workaround-build-system-issue-include-regenerated-ch.patch
 
 
 # Build fix
