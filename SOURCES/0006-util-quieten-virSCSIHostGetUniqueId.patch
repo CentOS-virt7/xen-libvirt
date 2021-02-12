@@ -1,0 +1,56 @@
+From: =?UTF-8?q?J=C3=A1n=20Tomko?= <jtomko@redhat.com>
+Date: Wed, 4 Nov 2020 12:29:07 +0100
+Subject: [PATCH] util: quieten virSCSIHostGetUniqueId
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The only caller of this function ignores failure
+and just sets the unique_id to -1.
+
+Failing to read the file is likely to the device no longer
+being present, not a real error.
+
+Stop reporting errors in this function.
+
+https://bugzilla.redhat.com/show_bug.cgi?id=1692100
+
+Signed-off-by: Ján Tomko <jtomko@redhat.com>
+Reviewed-by: Erik Skultety <eskultet@redhat.com>
+(cherry picked from commit 4a56278e770c972dbee7be5842b557de152a586e)
+---
+ src/util/virscsihost.c | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/src/util/virscsihost.c b/src/util/virscsihost.c
+index 4e6d8f7ad6..b1d51b40d3 100644
+--- a/src/util/virscsihost.c
++++ b/src/util/virscsihost.c
+@@ -41,6 +41,8 @@ VIR_LOG_INIT("util.scsi_host");
+  * Read the value of the "scsi_host" unique_id file.
+  *
+  * Returns the value on success or -1 on failure.
++ *
++ * No errors are reported.
+  */
+ int
+ virSCSIHostGetUniqueId(const char *sysfs_prefix,
+@@ -54,16 +56,14 @@ virSCSIHostGetUniqueId(const char *sysfs_prefix,
+     sysfs_path = g_strdup_printf("%s/host%d/unique_id",
+                                  sysfs_prefix ? sysfs_prefix : SYSFS_SCSI_HOST_PATH, host);
+ 
+-    if (virFileReadAll(sysfs_path, 1024, &buf) < 0)
++    if (virFileReadAllQuiet(sysfs_path, 1024, &buf) < 0)
+         return -1;
+ 
+     if ((p = strchr(buf, '\n')))
+         *p = '\0';
+ 
+     if (virStrToLong_i(buf, NULL, 10, &unique_id) < 0) {
+-        virReportError(VIR_ERR_INTERNAL_ERROR,
+-                       _("unable to parse unique_id: %s"), buf);
+-
++        VIR_DEBUG("unable to parse unique_id: '%s'", buf);
+         return -1;
+     }
+ 

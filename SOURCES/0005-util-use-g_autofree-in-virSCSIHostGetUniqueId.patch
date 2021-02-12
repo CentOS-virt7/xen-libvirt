@@ -1,0 +1,57 @@
+From: =?UTF-8?q?J=C3=A1n=20Tomko?= <jtomko@redhat.com>
+Date: Wed, 4 Nov 2020 12:08:19 +0100
+Subject: [PATCH] util: use g_autofree in virSCSIHostGetUniqueId
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Signed-off-by: Ján Tomko <jtomko@redhat.com>
+Reviewed-by: Erik Skultety <eskultet@redhat.com>
+(cherry picked from commit 843b70995471c1a20822ee62ff084310066b4b4a)
+---
+ src/util/virscsihost.c | 16 +++++-----------
+ 1 file changed, 5 insertions(+), 11 deletions(-)
+
+diff --git a/src/util/virscsihost.c b/src/util/virscsihost.c
+index 7d8e5299b8..4e6d8f7ad6 100644
+--- a/src/util/virscsihost.c
++++ b/src/util/virscsihost.c
+@@ -46,17 +46,16 @@ int
+ virSCSIHostGetUniqueId(const char *sysfs_prefix,
+                        int host)
+ {
+-    char *sysfs_path = NULL;
++    g_autofree char *sysfs_path = NULL;
+     char *p = NULL;
+-    int ret = -1;
+-    char *buf = NULL;
++    g_autofree char *buf = NULL;
+     int unique_id;
+ 
+     sysfs_path = g_strdup_printf("%s/host%d/unique_id",
+                                  sysfs_prefix ? sysfs_prefix : SYSFS_SCSI_HOST_PATH, host);
+ 
+     if (virFileReadAll(sysfs_path, 1024, &buf) < 0)
+-        goto cleanup;
++        return -1;
+ 
+     if ((p = strchr(buf, '\n')))
+         *p = '\0';
+@@ -65,15 +64,10 @@ virSCSIHostGetUniqueId(const char *sysfs_prefix,
+         virReportError(VIR_ERR_INTERNAL_ERROR,
+                        _("unable to parse unique_id: %s"), buf);
+ 
+-        goto cleanup;
++        return -1;
+     }
+ 
+-    ret = unique_id;
+-
+- cleanup:
+-    VIR_FREE(sysfs_path);
+-    VIR_FREE(buf);
+-    return ret;
++    return unique_id;
+ }
+ 
+ 

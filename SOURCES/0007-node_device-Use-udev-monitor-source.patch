@@ -1,0 +1,46 @@
+From: Michal Privoznik <mprivozn@redhat.com>
+Date: Tue, 17 Nov 2020 12:56:39 +0100
+Subject: [PATCH] node_device: Use "udev" monitor source
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+In v6.3.0-rc1~67 I've made a switch: instead of listening on udev
+events the nodedev driver started listening for kernel events.
+This was because when a device changes its name (e.g. NICs) we
+will get "move" event with DEVPATH_OLD property set, which we can
+then use to remove the old device and thus keep our internal list
+up to date. The switch to "kernel" source was made because if the
+old NICs naming (eth0, eth1, ...) is enabled (e.g. via
+net.ifnames=0 on the kernel cmd line) then udev overwrites the
+property with the new name making our internal list go out of
+sync. Interestingly, when the od NICs naming is not enabled then
+the DEVPATH_OLD contains the correct value.
+
+But as it turns out, "kernel" source might be missing some other
+important properties, e.g. USB vendor/product IDs. Therefore,
+switch back to "udev" source and wish the best of luck to users
+using the old NICs naming.
+
+Resolves: https://bugzilla.redhat.com/show_bug.cgi?id=1897625
+Fixes: 9a13704818e4a018723e0ec5b9e97b176f1c8584
+Signed-off-by: Michal Privoznik <mprivozn@redhat.com>
+Reviewed-by: Daniel P. Berrangé <berrange@redhat.com>
+(cherry picked from commit 7e67a136dab9034dd3cb2ed76fa90c524c800cde)
+---
+ src/node_device/node_device_udev.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/node_device/node_device_udev.c b/src/node_device/node_device_udev.c
+index ff558efb83..b7fbd42fa1 100644
+--- a/src/node_device/node_device_udev.c
++++ b/src/node_device/node_device_udev.c
+@@ -1878,7 +1878,7 @@ nodeStateInitialize(bool privileged,
+ 
+     virObjectLock(priv);
+ 
+-    priv->udev_monitor = udev_monitor_new_from_netlink(udev, "kernel");
++    priv->udev_monitor = udev_monitor_new_from_netlink(udev, "udev");
+     if (!priv->udev_monitor) {
+         virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
+                        _("udev_monitor_new_from_netlink returned NULL"));
